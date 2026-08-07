@@ -5,7 +5,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 TOKEN = "8952379767:AAEFYcjaQf-d7fc1NjUBKD_rQPgVCHwjz-U"
-CHANNEL_USERNAME = "@smm_veko"  # Majburiy obuna kanali
+CHANNEL_USERNAME = "@trade_chanel_uz"  # Majburiy obuna kanali
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
