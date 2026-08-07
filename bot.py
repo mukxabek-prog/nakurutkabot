@@ -8,20 +8,18 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 TOKEN = "8952379767:AAEFYcjaQf-d7fc1NjUBKD_rQPgVCHwjz-U"
 ADMIN_ID = 8866852203
-CHANNEL_ID = "@trade_chanel_uz"  # Post yuboriladigan kanal (Kanalga bot admin qilingan bo'lishi kerak!)
-CHANNEL_USERNAME = "trade_chanel_uz" # Majburiy obuna kanali
+CHANNEL_ID = "@trade_chanel_uz"  
+CHANNEL_USERNAME = "trade_chanel_uz" 
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
-# FSM holatlari (So'rovnoma yaratish uchun)
 class CreatePoll(StatesGroup):
     waiting_for_text = State()
     waiting_for_photo = State()
     preview = State()
 
 
-# Majburiy obunani tekshirish
 async def check_subscription(user_id: int) -> bool:
     try:
         member = await bot.get_chat_member(chat_id=f"@{CHANNEL_USERNAME}", user_id=user_id)
@@ -36,7 +34,6 @@ async def check_subscription(user_id: int) -> bool:
 async def cmd_start(message: types.Message):
     user_id = message.from_user.id
     
-    # Majburiy obunani tekshiramiz
     if not await check_subscription(user_id):
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="📢 Kanalga obuna bo'lish", url=f"https://t.me/{CHANNEL_USERNAME}")],
@@ -45,18 +42,15 @@ async def cmd_start(message: types.Message):
         await message.answer("⚠️ Botdan foydalanish uchun avval kanalimizga obuna bo'ling:", reply_markup=kb)
         return
 
-    await send_main_menu(message)
-
-
-async def send_main_menu(message: types.Message):
-    user_id = message.from_user.id
+    # Kanalga qo'shilish tugmasidan kelganda ko'rsatiladigan menyu
     kb = []
-    
     if user_id == ADMIN_ID:
         kb.append([InlineKeyboardButton(text="⚙️ Admin Panel", callback_data="admin_panel")])
     
-    keyboard = InlineKeyboardMarkup(inline_keyboard=kb) if kb else None
-    await message.answer("Xush kelibsiz! Asosiy menyudasiz.", reply_markup=keyboard)
+    kb.append([InlineKeyboardButton(text="🏆 Konkursda qatnashish / Nik qo'shish", callback_data="join_contest")])
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=kb)
+    await message.answer("🎉 Xush kelibsiz! Konkurs botiga muvaffaqiyatli kirdingiz.", reply_markup=keyboard)
 
 
 @dp.callback_query(F.data == "check_sub")
@@ -64,9 +58,23 @@ async def process_check_sub(callback: types.CallbackQuery):
     if await check_subscription(callback.from_user.id):
         await callback.message.delete()
         await callback.message.answer("Rahmat! Obuna tasdiqlandi.")
-        await send_main_menu(callback.message)
+        
+        # Asosiy menyuni chiqarish
+        user_id = callback.from_user.id
+        kb = []
+        if user_id == ADMIN_ID:
+            kb.append([InlineKeyboardButton(text="⚙️ Admin Panel", callback_data="admin_panel")])
+        kb.append([InlineKeyboardButton(text="🏆 Konkursda qatnashish / Nik qo'shish", callback_data="join_contest")])
+        
+        await callback.message.answer("Kerakli bo'limni tanlang:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
     else:
         await callback.answer("Siz hali kanalga obuna bo'lmadingiz!", show_alert=True)
+
+
+@dp.callback_query(F.data == "join_contest")
+async def join_contest_callback(callback: types.CallbackQuery):
+    await callback.message.answer("✅ Siz muvaffaqiyatli ro'yxatga olindingiz! Tez orada ovoz berish boshlanadi.")
+    await callback.answer()
 
 
 # --- ADMIN PANEL ---
@@ -93,7 +101,6 @@ async def start_add_poll(callback: types.CallbackQuery, state: FSMContext):
 async def cancel_poll(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
     await callback.message.edit_text("Amaliyot bekor qilindi.")
-    await send_main_menu(callback.message)
 
 
 @dp.message(CreatePoll.waiting_for_text, F.from_user.id == ADMIN_ID)
@@ -148,7 +155,6 @@ async def publish_poll(callback: types.CallbackQuery, state: FSMContext):
     text = data.get("text")
     photo = data.get("photo")
     
-    # Kanalga tashlash uchun pastki "Qo'shilish" tugmasi
     bot_info = await bot.get_me()
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="➕ Qo'shilish", url=f"https://t.me/{bot_info.username}?start=join")]
@@ -162,10 +168,9 @@ async def publish_poll(callback: types.CallbackQuery, state: FSMContext):
             
         await callback.message.answer("✅ So'rovnoma muvaffaqiyatli kanalga yuborildi!")
     except Exception as e:
-        await callback.message.answer(f"❌ Xatolik yuz berdi: {e}\n\n(Botni @Chanel_trade kanaliga admin qilganingizni tekshiring!)")
+        await callback.message.answer(f"❌ Xatolik yuz berdi: {e}")
         
     await state.clear()
-    await send_main_menu(callback.message)
 
 
 @dp.callback_query(F.data == "close_menu")
