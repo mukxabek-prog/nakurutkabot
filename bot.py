@@ -8,7 +8,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 TOKEN = "8952379767:AAEFYcjaQf-d7fc1NjUBKD_rQPgVCHwjz-U"
 ADMIN_ID = 8866852203
-CHANNEL_ID = "@Chanel_trade"  # Post yuboriladigan kanal (Kanalga bot admin qilingan bo'lishi kerak!)
+CHANNEL_ID = "@trade_chanel_uz"  # Post yuboriladigan kanal (Kanalga bot admin qilingan bo'lishi kerak!)
 CHANNEL_USERNAME = "trade_chanel_uz" # Majburiy obuna kanali
 
 bot = Bot(token=TOKEN)
