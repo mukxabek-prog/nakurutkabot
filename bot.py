@@ -9,7 +9,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 TOKEN = "8952379767:AAEFYcjaQf-d7fc1NjUBKD_rQPgVCHwjz-U"
 ADMIN_ID = 8866852203
 CHANNEL_ID = "@trade_chanel_uz"  # Post yuboriladigan kanal (yoki kanal username/id si)
-CHANNEL_USERNAME = "trade chanel" # Majburiy obuna kanali
+CHANNEL_USERNAME = "trade_chanel_uz" # Majburiy obuna kanali
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
