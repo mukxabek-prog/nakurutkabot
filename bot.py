@@ -4,7 +4,7 @@ from aiogram.filters import Command
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-TOKEN = "8716168448:AAGbkx0Z_gLz7BXWh5_4SGim-6ejD5MrbWE"
+TOKEN = "8952379767:AAEFYcjaQf-d7fc1NjUBKD_rQPgVCHwjz-U"
 CHANNEL_USERNAME = "@smm_veko"  # Majburiy obuna kanali
 
 bot = Bot(token=TOKEN)
