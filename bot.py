@@ -8,7 +8,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 TOKEN = "8952379767:AAEFYcjaQf-d7fc1NjUBKD_rQPgVCHwjz-U"
 ADMIN_ID = 8866852203
-CHANNEL_ID = "@trade_chanel_uz"  # Post yuboriladigan kanal (yoki kanal username/id si)
+CHANNEL_ID = "@Chanel_trade"  # Post yuboriladigan kanal (Kanalga bot admin qilingan bo'lishi kerak!)
 CHANNEL_USERNAME = "trade_chanel_uz" # Majburiy obuna kanali
 
 bot = Bot(token=TOKEN)
@@ -149,8 +149,9 @@ async def publish_poll(callback: types.CallbackQuery, state: FSMContext):
     photo = data.get("photo")
     
     # Kanalga tashlash uchun pastki "Qo'shilish" tugmasi
+    bot_info = await bot.get_me()
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="➕ Qo'shilish", url=f"https://t.me/{bot.username}?start=join")]
+        [InlineKeyboardButton(text="➕ Qo'shilish", url=f"https://t.me/{bot_info.username}?start=join")]
     ])
     
     try:
@@ -161,7 +162,7 @@ async def publish_poll(callback: types.CallbackQuery, state: FSMContext):
             
         await callback.message.answer("✅ So'rovnoma muvaffaqiyatli kanalga yuborildi!")
     except Exception as e:
-        await callback.message.answer(f"❌ Xatolik yuz berdi: {e}")
+        await callback.message.answer(f"❌ Xatolik yuz berdi: {e}\n\n(Botni @Chanel_trade kanaliga admin qilganingizni tekshiring!)")
         
     await state.clear()
     await send_main_menu(callback.message)
