@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import sqlite3
 from typing import Optional
 
@@ -20,12 +21,24 @@ from aiogram.types import (
 from aiogram.exceptions import TelegramBadRequest
 
 # ==================== SOZLAMALAR ====================
-BOT_TOKEN = "8952379767:AAE4AlY1JyRW57ekrDJ3u-ZlHOmgoltDVAo"           # @BotFather dan olingan token
-CHANNEL_USERNAME = "@trade_chanel_uz"           # majburiy obuna bo'ladigan kanal
-CHANNEL_ID = "@trade_chanel_uz"                 # post shu yerga tashlanadi (o'sha kanal)
-ADMIN_IDS = [8866852203]                         # admin(lar) Telegram ID raqami(lari)
-WEBAPP_URL = "https://mukxabek-prog.github.io/nakurutkabot/"   # nakurutka/donat/stars/premium WebApp havolasi (https shart!)
-DB_PATH = "contest.db"
+# Bu qiymatlar endi kod ichida emas, balki ENVIRONMENT VARIABLES orqali olinadi.
+# Render.com -> Dashboard -> Service -> Environment bo'limida quyidagilarni qo'shing:
+#   BOT_TOKEN, CHANNEL_USERNAME, CHANNEL_ID, ADMIN_IDS, WEBAPP_URL, DB_PATH
+BOT_TOKEN = os.getenv("BOT_TOKEN")                                   # @BotFather dan olingan token
+CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME", "@trade_chanel_uz")  # majburiy obuna bo'ladigan kanal
+CHANNEL_ID = os.getenv("CHANNEL_ID", "@trade_chanel_uz")              # post shu yerga tashlanadi (o'sha kanal)
+ADMIN_IDS = [
+    int(x.strip()) for x in os.getenv("ADMIN_IDS", "8866852203").split(",") if x.strip()
+]  # admin(lar) Telegram ID raqami(lari), vergul bilan ajratiladi: "111,222,333"
+WEBAPP_URL = os.getenv(
+    "WEBAPP_URL", "https://mukxabek-prog.github.io/nakurutkabot/"
+)  # nakurutka/donat/stars/premium WebApp havolasi (https shart!)
+DB_PATH = os.getenv("DB_PATH", "contest.db")
+
+if not BOT_TOKEN:
+    raise RuntimeError(
+        "BOT_TOKEN topilmadi! Render'da Environment bo'limiga BOT_TOKEN qiymatini qo'shing."
+    )
 
 logging.basicConfig(level=logging.INFO)
 
