@@ -64,7 +64,8 @@ def init_db():
             chat_id INTEGER,
             message_id INTEGER,
             intro_text TEXT,
-            has_photo INTEGER DEFAULT 0
+            has_photo INTEGER DEFAULT 0,
+            stopped INTEGER DEFAULT 0
         )
     """)
     conn.commit()
@@ -130,6 +131,13 @@ def get_battle_post():
     return row
 
 
+def stop_battle_in_db():
+    conn = db_connect()
+    conn.execute("UPDATE battle_post SET stopped = 1 WHERE id = 1")
+    conn.commit()
+    conn.close()
+
+
 # ==================== FSM HOLATLARI ====================
 class AdminPostStates(StatesGroup):
     waiting_text = State()
@@ -169,6 +177,7 @@ def admin_panel_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📢 Post qo'shish", callback_data="add_post")],
         [InlineKeyboardButton(text="🔄 Ovozlarni yangilash", callback_data="refresh_battle")],
+        [InlineKeyboardButton(text="🛑 To'xtatish (g'olibni e'lon qilish)", callback_data="stop_battle")],
         [InlineKeyboardButton(text="⬅️ Orqaga", callback_data="back_main")],
     ])
 
@@ -211,14 +220,42 @@ def build_post_content(intro_text: str):
     return text, kb
 
 
+def build_final_results_text(intro_text: str) -> str:
+    """Konkurs to'xtatilgandan keyingi yakuniy natijalar matnini quradi (tugmalarsiz)."""
+    participants = get_all_participants()
+
+    lines = []
+    if intro_text:
+        lines.append(intro_text)
+        lines.append("")
+    lines.append("🏁 <b>KONKURS YAKUNLANDI!</b> 🏁\n")
+
+    if participants:
+        winner = participants[0]
+        lines.append(f"🏆 <b>G'olib:</b> {winner['name']} — {winner['votes']} ovoz\n")
+        lines.append("📊 <b>Yakuniy natijalar:</b>")
+        for i, p in enumerate(participants, start=1):
+            medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else "▫️"
+            lines.append(f"{medal} {i}. {p['name']} — {p['votes']} ovoz")
+    else:
+        lines.append("Ishtirokchilar bo'lmadi.")
+
+    return "\n".join(lines)
+
+
 async def update_battle_message():
     """Kanaldagi postni JORIY ovoz/ishtirokchi ma'lumotlari bilan joyida (edit) yangilaydi.
-    Har safar yangi qo'shilish yoki ovoz berishdan keyin avtomatik chaqiriladi."""
+    Konkurs to'xtatilgan bo'lsa — yakuniy natijalar (tugmasiz) ko'rsatiladi.
+    Har safar yangi qo'shilish/ovoz berish yoki to'xtatishdan keyin avtomatik chaqiriladi."""
     post = get_battle_post()
     if post is None:
         return  # hali post yuborilmagan bo'lsa, yangilanadigan narsa yo'q
 
-    text, kb = build_post_content(post["intro_text"] or "")
+    if post["stopped"]:
+        text = build_final_results_text(post["intro_text"] or "")
+        kb = None
+    else:
+        text, kb = build_post_content(post["intro_text"] or "")
 
     try:
         if post["has_photo"]:
@@ -251,6 +288,11 @@ async def start_with_payload(message: Message, command: CommandObject, state: FS
 
         voter_id = message.from_user.id
 
+        post = get_battle_post()
+        if post and post["stopped"]:
+            await message.answer("🏁 Konkurs allaqachon yakunlangan. Endi ovoz berish mumkin emas.")
+            return
+
         if not await check_subscription(voter_id):
             await message.answer(
                 "❌ Ovoz berish uchun avval kanalga obuna bo'ling:",
@@ -281,6 +323,11 @@ async def start_with_payload(message: Message, command: CommandObject, state: FS
     if payload == "join":
         # ====== KANALDAGI "✅ Qo'shilish" bosilganda: darhol, avtomatik nik bilan qo'shiladi ======
         user_id = message.from_user.id
+
+        post = get_battle_post()
+        if post and post["stopped"]:
+            await message.answer("🏁 Konkurs allaqachon yakunlangan. Endi qatnashish mumkin emas.")
+            return
 
         if not await check_subscription(user_id):
             await message.answer(
@@ -431,6 +478,39 @@ async def refresh_battle(callback: CallbackQuery):
 
     await update_battle_message()
     await callback.answer("✅ Ovozlar yangilandi!", show_alert=True)
+
+
+@router.callback_query(F.data == "stop_battle")
+async def stop_battle(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("⛔ Sizga ruxsat yo'q.", show_alert=True)
+        return
+
+    post = get_battle_post()
+    if post is None:
+        await callback.answer("❌ Hali post yuborilmagan.", show_alert=True)
+        return
+
+    if post["stopped"]:
+        await callback.answer("ℹ️ Konkurs allaqachon to'xtatilgan.", show_alert=True)
+        return
+
+    stop_battle_in_db()
+    await update_battle_message()
+
+    participants = get_all_participants()
+    if participants:
+        winner = participants[0]
+        await callback.message.answer(
+            f"🏁 Konkurs to'xtatildi!\n\n🏆 <b>G'olib:</b> {winner['name']} — {winner['votes']} ovoz",
+            reply_markup=admin_panel_keyboard(),
+        )
+    else:
+        await callback.message.answer(
+            "🏁 Konkurs to'xtatildi. Ishtirokchilar bo'lmagani uchun g'olib yo'q.",
+            reply_markup=admin_panel_keyboard(),
+        )
+    await callback.answer()
 
 
 # ==================== ISHGA TUSHIRISH ====================
