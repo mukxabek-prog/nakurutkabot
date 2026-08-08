@@ -19,7 +19,7 @@ from aiogram.types import (
 from aiogram.exceptions import TelegramBadRequest
 
 # ==================== SOZLAMALAR ====================
-BOT_TOKEN = "8952379767:AAEFYcjaQf-d7fc1NjUBKD_rQPgVCHwjz-U"           # @BotFather dan olingan token
+BOT_TOKEN = "8952379767:AAE4AlY1JyRW57ekrDJ3u-ZlHOmgoltDVAo"           # @BotFather dan olingan token
 CHANNEL_USERNAME = "@trade_chanel_uz"           # majburiy obuna bo'ladigan kanal
 CHANNEL_ID = "@trade_chanel_uz"                 # post shu yerga tashlanadi (o'sha kanal)
 ADMIN_IDS = [8866852203]                         # admin(lar) Telegram ID raqami(lari)
