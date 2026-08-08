@@ -21,7 +21,7 @@ from aiogram.exceptions import TelegramBadRequest
 # ==================== SOZLAMALAR ====================
 BOT_TOKEN = "8952379767:AAEFYcjaQf-d7fc1NjUBKD_rQPgVCHwjz-U"           # @BotFather dan olingan token
 CHANNEL_USERNAME = "@trade_chanel_uz"           # majburiy obuna bo'ladigan kanal
-CHANNEL_ID = "@trade_chanel_uz"                 # Battle posti shu yerga tashlanadi (o'sha kanal)
+CHANNEL_ID = "@trade_chanel_uz"                 # post shu yerga tashlanadi (o'sha kanal)
 ADMIN_IDS = [8866852203]                         # admin(lar) Telegram ID raqami(lari)
 DB_PATH = "contest.db"
 
@@ -32,7 +32,7 @@ dp = Dispatcher(storage=MemoryStorage())
 router = Router()
 dp.include_router(router)
 
-BOT_USERNAME: Optional[str] = None  # /start?=vote_ID deep-link havolasi uchun runtime'da olinadi
+BOT_USERNAME: Optional[str] = None  # deep-link havolalar uchun runtime'da olinadi
 
 
 # ==================== DATABASE ====================
@@ -62,7 +62,9 @@ def init_db():
         CREATE TABLE IF NOT EXISTS battle_post (
             id INTEGER PRIMARY KEY CHECK (id = 1),
             chat_id INTEGER,
-            message_id INTEGER
+            message_id INTEGER,
+            intro_text TEXT,
+            has_photo INTEGER DEFAULT 0
         )
     """)
     conn.commit()
@@ -89,7 +91,8 @@ def get_participant(user_id: int):
 
 def get_all_participants():
     conn = db_connect()
-    rows = conn.execute("SELECT * FROM participants ORDER BY votes DESC, name ASC").fetchall()
+    # votes bo'yicha kamayish tartibida, teng ovozlar ichida ENG SO'NGGI qo'shilgan oldinda turadi
+    rows = conn.execute("SELECT * FROM participants ORDER BY votes DESC, user_id DESC").fetchall()
     conn.close()
     return rows
 
@@ -109,10 +112,13 @@ def add_vote(voter_id: int, candidate_id: int):
     conn.close()
 
 
-def save_battle_post(chat_id: int, message_id: int):
+def save_battle_post(chat_id: int, message_id: int, intro_text: str, has_photo: bool):
     conn = db_connect()
     conn.execute("DELETE FROM battle_post")
-    conn.execute("INSERT INTO battle_post (id, chat_id, message_id) VALUES (1, ?, ?)", (chat_id, message_id))
+    conn.execute(
+        "INSERT INTO battle_post (id, chat_id, message_id, intro_text, has_photo) VALUES (1, ?, ?, ?, ?)",
+        (chat_id, message_id, intro_text, 1 if has_photo else 0),
+    )
     conn.commit()
     conn.close()
 
@@ -125,10 +131,6 @@ def get_battle_post():
 
 
 # ==================== FSM HOLATLARI ====================
-class RegisterStates(StatesGroup):
-    waiting_name = State()
-
-
 class AdminPostStates(StatesGroup):
     waiting_text = State()
     waiting_photo = State()
@@ -157,19 +159,15 @@ def subscribe_keyboard() -> InlineKeyboardMarkup:
     ])
 
 
-def main_menu_keyboard(user_id: int) -> InlineKeyboardMarkup:
-    buttons = [
-        [InlineKeyboardButton(text="🏆 Konkursda qatnashish", callback_data="register")],
-    ]
-    if is_admin(user_id):
-        buttons.append([InlineKeyboardButton(text="⚙️ Admin panel", callback_data="admin_panel")])
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
+def main_menu_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⚙️ Admin panel", callback_data="admin_panel")],
+    ])
 
 
 def admin_panel_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="➕ Qo'shish (Kanalga taklif posti)", callback_data="add_join_post")],
-        [InlineKeyboardButton(text="📢 Kanalga Battle postini tashlash", callback_data="post_battle")],
+        [InlineKeyboardButton(text="📢 Post qo'shish", callback_data="add_post")],
         [InlineKeyboardButton(text="🔄 Ovozlarni yangilash", callback_data="refresh_battle")],
         [InlineKeyboardButton(text="⬅️ Orqaga", callback_data="back_main")],
     ])
@@ -181,42 +179,70 @@ def skip_photo_keyboard() -> InlineKeyboardMarkup:
     ])
 
 
-def join_channel_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Qo'shilish", url=f"https://t.me/{BOT_USERNAME}?start=join")],
-    ])
-
-
-def build_battle_text_and_kb():
-    """Kanalga tashlanadigan Battle postining matni va tugmalarini quradi."""
+def build_post_content(intro_text: str):
+    """Kanalga tashlanadigan yagona postning matni va tugmalarini quradi:
+    admin matni + ishtirokchilar ro'yxati (ovoz bilan) + Qo'shilish tugmasi."""
     participants = get_all_participants()
-    if not participants:
-        return None, None
 
-    lines = ["🔥 <b>BATTLE / OVOZ BERISH</b> 🔥\n", "Ishtirokchiga ovoz berish uchun tugmani bosing:\n"]
+    lines = []
+    if intro_text:
+        lines.append(intro_text)
+        lines.append("")
+    lines.append("🔥 <b>BATTLE / OVOZ BERISH</b> 🔥")
+    lines.append("Ishtirokchiga ovoz berish uchun tugmani bosing:\n")
+
     kb_rows = []
-    for i, p in enumerate(participants, start=1):
-        lines.append(f"{i}. <b>{p['name']}</b> — {p['votes']} ovoz")
-        kb_rows.append([
-            InlineKeyboardButton(
-                text=f"🗳 {p['name']} ({p['votes']})",
-                url=f"https://t.me/{BOT_USERNAME}?start=vote_{p['user_id']}",
-            )
-        ])
+    if participants:
+        for i, p in enumerate(participants, start=1):
+            lines.append(f"{i}. {p['name']} — {p['votes']} ovoz")
+            kb_rows.append([
+                InlineKeyboardButton(
+                    text=f"🗳 {p['name']} ({p['votes']})",
+                    url=f"https://t.me/{BOT_USERNAME}?start=vote_{p['user_id']}",
+                )
+            ])
+    else:
+        lines.append("Hozircha ishtirokchilar yo'q.")
+
+    kb_rows.append([InlineKeyboardButton(text="✅ Qo'shilish", url=f"https://t.me/{BOT_USERNAME}?start=join")])
+
     text = "\n".join(lines)
     kb = InlineKeyboardMarkup(inline_keyboard=kb_rows)
     return text, kb
 
 
+async def update_battle_message():
+    """Kanaldagi postni JORIY ovoz/ishtirokchi ma'lumotlari bilan joyida (edit) yangilaydi.
+    Har safar yangi qo'shilish yoki ovoz berishdan keyin avtomatik chaqiriladi."""
+    post = get_battle_post()
+    if post is None:
+        return  # hali post yuborilmagan bo'lsa, yangilanadigan narsa yo'q
+
+    text, kb = build_post_content(post["intro_text"] or "")
+
+    try:
+        if post["has_photo"]:
+            await bot.edit_message_caption(
+                chat_id=post["chat_id"], message_id=post["message_id"], caption=text, reply_markup=kb
+            )
+        else:
+            await bot.edit_message_text(
+                chat_id=post["chat_id"], message_id=post["message_id"], text=text, reply_markup=kb
+            )
+    except TelegramBadRequest as e:
+        if "message is not modified" not in str(e):
+            logging.warning(f"Battle postini avtomatik yangilashda xatolik: {e}")
+
+
 # ==================== HANDLERLAR ====================
 
-# --- 1) Deep-link orqali /start (masalan ovoz berish uchun) ---
+# --- 1) Deep-link orqali /start (ovoz berish / qo'shilish) ---
 @router.message(CommandStart(deep_link=True))
 async def start_with_payload(message: Message, command: CommandObject, state: FSMContext):
     payload = command.args or ""
 
     if payload.startswith("vote_"):
-        # ====== OVOZ BERISH SSENARIYSI: bosh menyu OCHILMAYDI ======
+        # ====== OVOZ BERISH: bosh menyu OCHILMAYDI, darhol ovoz qo'shiladi ======
         try:
             candidate_id = int(payload.split("_", 1)[1])
         except (IndexError, ValueError):
@@ -225,7 +251,6 @@ async def start_with_payload(message: Message, command: CommandObject, state: FS
 
         voter_id = message.from_user.id
 
-        # Majburiy obunani baribir tekshiramiz
         if not await check_subscription(voter_id):
             await message.answer(
                 "❌ Ovoz berish uchun avval kanalga obuna bo'ling:",
@@ -250,10 +275,11 @@ async def start_with_payload(message: Message, command: CommandObject, state: FS
         await message.answer(
             f"✅ Ovozingiz qabul qilindi!\nSiz <b>{candidate['name']}</b>ga ovoz berdingiz."
         )
+        await update_battle_message()
         return
 
     if payload == "join":
-        # ====== KANALDAGI TAKLIF POSTIDAN "✅ Qo'shilish" bosilganda ======
+        # ====== KANALDAGI "✅ Qo'shilish" bosilganda: darhol, avtomatik nik bilan qo'shiladi ======
         user_id = message.from_user.id
 
         if not await check_subscription(user_id):
@@ -270,11 +296,11 @@ async def start_with_payload(message: Message, command: CommandObject, state: FS
         name = message.from_user.full_name or message.from_user.username or f"User{user_id}"
         add_participant(user_id, name)
         await message.answer(
-            f"🎉 Tabriklaymiz, <b>{name}</b>! Siz konkurs ishtirokchisi sifatida avtomatik qo'shildingiz."
+            f"🎉 Tabriklaymiz, <b>{name}</b>! Siz konkurs ishtirokchisi sifatida qo'shildingiz."
         )
+        await update_battle_message()
         return
 
-    # Boshqa turdagi payload bo'lsa — oddiy /start kabi ishlaymiz
     await cmd_start(message, state)
 
 
@@ -292,20 +318,25 @@ async def cmd_start(message: Message, state: FSMContext):
         )
         return
 
-    await message.answer(
-        "👋 Xush kelibsiz!\n\nKonkursimizga xush kelibsiz. Pastdagi tugmalardan foydalaning:",
-        reply_markup=main_menu_keyboard(user_id),
-    )
+    if is_admin(user_id):
+        await message.answer("👋 Xush kelibsiz, Admin!", reply_markup=main_menu_keyboard())
+    else:
+        await message.answer(
+            "👋 Xush kelibsiz!\n\n"
+            f"Konkursda qatnashish va ovoz berish uchun {CHANNEL_USERNAME} kanalidagi postlarni kuzatib boring."
+        )
 
 
 @router.callback_query(F.data == "check_sub")
 async def check_sub_callback(callback: CallbackQuery):
     if await check_subscription(callback.from_user.id):
         await callback.message.edit_text("✅ Obuna tasdiqlandi!")
-        await callback.message.answer(
-            "Bosh menyu:",
-            reply_markup=main_menu_keyboard(callback.from_user.id),
-        )
+        if is_admin(callback.from_user.id):
+            await callback.message.answer("Bosh menyu:", reply_markup=main_menu_keyboard())
+        else:
+            await callback.message.answer(
+                f"Konkurs postlarini {CHANNEL_USERNAME} kanalida kuzatib boring."
+            )
     else:
         await callback.answer("❌ Siz hali obuna bo'lmagansiz!", show_alert=True)
 
@@ -313,37 +344,10 @@ async def check_sub_callback(callback: CallbackQuery):
 @router.callback_query(F.data == "back_main")
 async def back_main(callback: CallbackQuery):
     await callback.message.edit_text("Bosh menyu:")
-    await callback.message.edit_reply_markup(reply_markup=main_menu_keyboard(callback.from_user.id))
+    await callback.message.edit_reply_markup(reply_markup=main_menu_keyboard())
 
 
-# --- 3) Ro'yxatdan o'tish ---
-@router.callback_query(F.data == "register")
-async def register_start(callback: CallbackQuery, state: FSMContext):
-    existing = get_participant(callback.from_user.id)
-    if existing:
-        await callback.answer("Siz allaqachon ro'yxatdan o'tgansiz ✅", show_alert=True)
-        return
-
-    await callback.message.answer("✏️ Konkursda ishtirok etish uchun ism/nikingizni yuboring:")
-    await state.set_state(RegisterStates.waiting_name)
-    await callback.answer()
-
-
-@router.message(RegisterStates.waiting_name)
-async def register_finish(message: Message, state: FSMContext):
-    name = (message.text or "").strip()
-    if not name:
-        await message.answer("❌ Iltimos, matn ko'rinishida ism yuboring.")
-        return
-
-    add_participant(message.from_user.id, name)
-    await state.clear()
-    await message.answer(
-        f"🎉 Tabriklaymiz, <b>{name}</b>! Siz konkurs ishtirokchisi sifatida ro'yxatdan o'tdingiz."
-    )
-
-
-# --- 4) Admin panel ---
+# --- 3) Admin panel ---
 @router.callback_query(F.data == "admin_panel")
 async def admin_panel(callback: CallbackQuery):
     if not is_admin(callback.from_user.id):
@@ -352,20 +356,66 @@ async def admin_panel(callback: CallbackQuery):
     await callback.message.edit_text("⚙️ Admin panel:", reply_markup=admin_panel_keyboard())
 
 
-@router.callback_query(F.data == "post_battle")
-async def post_battle(callback: CallbackQuery):
+@router.callback_query(F.data == "add_post")
+async def add_post(callback: CallbackQuery, state: FSMContext):
     if not is_admin(callback.from_user.id):
         await callback.answer("⛔ Sizga ruxsat yo'q.", show_alert=True)
         return
 
-    text, kb = build_battle_text_and_kb()
-    if text is None:
-        await callback.answer("❌ Hozircha ishtirokchilar yo'q.", show_alert=True)
+    await callback.message.answer("✏️ Post uchun matnni yuboring:")
+    await state.set_state(AdminPostStates.waiting_text)
+    await callback.answer()
+
+
+@router.message(AdminPostStates.waiting_text)
+async def add_post_text(message: Message, state: FSMContext):
+    text = (message.text or "").strip()
+    if not text:
+        await message.answer("❌ Iltimos, matn ko'rinishida yuboring.")
         return
 
+    await state.update_data(intro_text=text)
+    await message.answer(
+        "🖼 Endi rasm yuboring.\n\nRasmsiz yubormoqchi bo'lsangiz, pastdagi tugmani bosing:",
+        reply_markup=skip_photo_keyboard(),
+    )
+    await state.set_state(AdminPostStates.waiting_photo)
+
+
+@router.message(AdminPostStates.waiting_photo, F.photo)
+async def add_post_photo(message: Message, state: FSMContext):
+    data = await state.get_data()
+    intro_text = data.get("intro_text", "")
+    photo_id = message.photo[-1].file_id
+
+    text, kb = build_post_content(intro_text)
+    sent = await bot.send_photo(chat_id=CHANNEL_ID, photo=photo_id, caption=text, reply_markup=kb)
+    save_battle_post(sent.chat.id, sent.message_id, intro_text, has_photo=True)
+
+    await state.clear()
+    await message.answer("✅ Post rasm bilan kanalga joylandi!", reply_markup=admin_panel_keyboard())
+
+
+@router.message(AdminPostStates.waiting_photo)
+async def add_post_wrong_content(message: Message):
+    await message.answer(
+        "❌ Iltimos, rasm yuboring yoki 'Skip' tugmasini bosing.",
+        reply_markup=skip_photo_keyboard(),
+    )
+
+
+@router.callback_query(AdminPostStates.waiting_photo, F.data == "skip_photo")
+async def add_post_skip(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    intro_text = data.get("intro_text", "")
+
+    text, kb = build_post_content(intro_text)
     sent = await bot.send_message(chat_id=CHANNEL_ID, text=text, reply_markup=kb)
-    save_battle_post(sent.chat.id, sent.message_id)
-    await callback.answer("✅ Battle posti kanalga joylandi!", show_alert=True)
+    save_battle_post(sent.chat.id, sent.message_id, intro_text, has_photo=False)
+
+    await state.clear()
+    await callback.message.answer("✅ Post (rasmsiz) kanalga joylandi!", reply_markup=admin_panel_keyboard())
+    await callback.answer()
 
 
 @router.callback_query(F.data == "refresh_battle")
@@ -376,82 +426,11 @@ async def refresh_battle(callback: CallbackQuery):
 
     post = get_battle_post()
     if post is None:
-        await callback.answer("❌ Hali battle posti yuborilmagan.", show_alert=True)
+        await callback.answer("❌ Hali post yuborilmagan.", show_alert=True)
         return
 
-    text, kb = build_battle_text_and_kb()
-    if text is None:
-        await callback.answer("❌ Ishtirokchilar yo'q.", show_alert=True)
-        return
-
-    try:
-        await bot.edit_message_text(
-            chat_id=post["chat_id"], message_id=post["message_id"], text=text, reply_markup=kb
-        )
-        await callback.answer("✅ Ovozlar yangilandi!", show_alert=True)
-    except TelegramBadRequest as e:
-        if "message is not modified" in str(e):
-            await callback.answer("Hech narsa o'zgarmadi.", show_alert=True)
-        else:
-            await callback.answer(f"❌ Xatolik: {e}", show_alert=True)
-
-
-@router.callback_query(F.data == "add_join_post")
-async def add_join_post(callback: CallbackQuery, state: FSMContext):
-    if not is_admin(callback.from_user.id):
-        await callback.answer("⛔ Sizga ruxsat yo'q.", show_alert=True)
-        return
-
-    await callback.message.answer("✏️ Kanalga tashlanadigan taklif posti uchun matnni yuboring:")
-    await state.set_state(AdminPostStates.waiting_text)
-    await callback.answer()
-
-
-@router.message(AdminPostStates.waiting_text)
-async def add_join_post_text(message: Message, state: FSMContext):
-    text = (message.text or "").strip()
-    if not text:
-        await message.answer("❌ Iltimos, matn ko'rinishida yuboring.")
-        return
-
-    await state.update_data(post_text=text)
-    await message.answer(
-        "🖼 Endi rasm yuboring.\n\nAgar rasmsiz yubormoqchi bo'lsangiz, pastdagi tugmani bosing:",
-        reply_markup=skip_photo_keyboard(),
-    )
-    await state.set_state(AdminPostStates.waiting_photo)
-
-
-@router.message(AdminPostStates.waiting_photo, F.photo)
-async def add_join_post_photo(message: Message, state: FSMContext):
-    data = await state.get_data()
-    text = data.get("post_text", "")
-    photo_id = message.photo[-1].file_id
-
-    await bot.send_photo(
-        chat_id=CHANNEL_ID, photo=photo_id, caption=text, reply_markup=join_channel_keyboard()
-    )
-    await state.clear()
-    await message.answer("✅ Post rasm bilan kanalga joylandi!")
-
-
-@router.message(AdminPostStates.waiting_photo)
-async def add_join_post_wrong_content(message: Message):
-    await message.answer(
-        "❌ Iltimos, rasm yuboring yoki 'Skip' tugmasini bosing.",
-        reply_markup=skip_photo_keyboard(),
-    )
-
-
-@router.callback_query(AdminPostStates.waiting_photo, F.data == "skip_photo")
-async def add_join_post_skip(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    text = data.get("post_text", "")
-
-    await bot.send_message(chat_id=CHANNEL_ID, text=text, reply_markup=join_channel_keyboard())
-    await state.clear()
-    await callback.message.answer("✅ Post (rasmsiz) kanalga joylandi!")
-    await callback.answer()
+    await update_battle_message()
+    await callback.answer("✅ Ovozlar yangilandi!", show_alert=True)
 
 
 # ==================== ISHGA TUSHIRISH ====================
