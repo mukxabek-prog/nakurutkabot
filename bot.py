@@ -6,7 +6,7 @@ from typing import Optional
 from aiogram import Bot, Dispatcher, Router, F
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode, ChatMemberStatus
-from aiogram.filters import CommandStart, CommandObject
+from aiogram.filters import CommandStart, CommandObject, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -15,6 +15,7 @@ from aiogram.types import (
     CallbackQuery,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
+    WebAppInfo,
 )
 from aiogram.exceptions import TelegramBadRequest
 
@@ -23,6 +24,7 @@ BOT_TOKEN = "8952379767:AAE4AlY1JyRW57ekrDJ3u-ZlHOmgoltDVAo"           # @BotFat
 CHANNEL_USERNAME = "@trade_chanel_uz"           # majburiy obuna bo'ladigan kanal
 CHANNEL_ID = "@trade_chanel_uz"                 # post shu yerga tashlanadi (o'sha kanal)
 ADMIN_IDS = [8866852203]                         # admin(lar) Telegram ID raqami(lari)
+WEBAPP_URL = "https://mukxabek-prog.github.io/nakurutkabot/"   # nakurutka/donat/stars/premium WebApp havolasi (https shart!)
 DB_PATH = "contest.db"
 
 logging.basicConfig(level=logging.INFO)
@@ -92,10 +94,30 @@ def get_participant(user_id: int):
 
 def get_all_participants():
     conn = db_connect()
+    # Adminlar hech qachon ishtirokchilar ro'yxatida ko'rinmaydi.
     # votes bo'yicha kamayish tartibida, teng ovozlar ichida ENG SO'NGGI qo'shilgan oldinda turadi
-    rows = conn.execute("SELECT * FROM participants ORDER BY votes DESC, user_id DESC").fetchall()
+    if ADMIN_IDS:
+        placeholders = ",".join("?" for _ in ADMIN_IDS)
+        query = (
+            f"SELECT * FROM participants WHERE user_id NOT IN ({placeholders}) "
+            "ORDER BY votes DESC, user_id DESC"
+        )
+        rows = conn.execute(query, ADMIN_IDS).fetchall()
+    else:
+        rows = conn.execute("SELECT * FROM participants ORDER BY votes DESC, user_id DESC").fetchall()
     conn.close()
     return rows
+
+
+def cleanup_admin_participants():
+    """Agar admin oldin (test paytida) ishtirokchi sifatida qo'shilib qolgan bo'lsa, uni bazadan tozalaydi."""
+    if not ADMIN_IDS:
+        return
+    conn = db_connect()
+    placeholders = ",".join("?" for _ in ADMIN_IDS)
+    conn.execute(f"DELETE FROM participants WHERE user_id IN ({placeholders})", ADMIN_IDS)
+    conn.commit()
+    conn.close()
 
 
 def has_voted(voter_id: int) -> bool:
@@ -167,9 +189,9 @@ def subscribe_keyboard() -> InlineKeyboardMarkup:
     ])
 
 
-def main_menu_keyboard() -> InlineKeyboardMarkup:
+def webapp_entry_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="⚙️ Admin panel", callback_data="admin_panel")],
+        [InlineKeyboardButton(text="🚀 Kirish", web_app=WebAppInfo(url=WEBAPP_URL))],
     ])
 
 
@@ -324,6 +346,10 @@ async def start_with_payload(message: Message, command: CommandObject, state: FS
         # ====== KANALDAGI "✅ Qo'shilish" bosilganda: darhol, avtomatik nik bilan qo'shiladi ======
         user_id = message.from_user.id
 
+        if is_admin(user_id):
+            await message.answer("⛔ Adminlar konkursda ishtirokchi sifatida qatnasha olmaydi.")
+            return
+
         post = get_battle_post()
         if post and post["stopped"]:
             await message.answer("🏁 Konkurs allaqachon yakunlangan. Endi qatnashish mumkin emas.")
@@ -365,42 +391,47 @@ async def cmd_start(message: Message, state: FSMContext):
         )
         return
 
-    if is_admin(user_id):
-        await message.answer("👋 Xush kelibsiz, Admin!", reply_markup=main_menu_keyboard())
-    else:
-        await message.answer(
-            "👋 Xush kelibsiz!\n\n"
-            f"Konkursda qatnashish va ovoz berish uchun {CHANNEL_USERNAME} kanalidagi postlarni kuzatib boring."
-        )
+    await message.answer(
+        "🤖 <b>Botga xush kelibsiz!</b>\n\n"
+        "✅ Nakrutka\n"
+        "💎 Donat\n"
+        "⭐ Stars\n"
+        "👑 Premium\n\n"
+        "xizmatlaridan foydalanish uchun pastdagi tugmani bosing 👇",
+        reply_markup=webapp_entry_keyboard(),
+    )
 
 
 @router.callback_query(F.data == "check_sub")
 async def check_sub_callback(callback: CallbackQuery):
     if await check_subscription(callback.from_user.id):
         await callback.message.edit_text("✅ Obuna tasdiqlandi!")
-        if is_admin(callback.from_user.id):
-            await callback.message.answer("Bosh menyu:", reply_markup=main_menu_keyboard())
-        else:
-            await callback.message.answer(
-                f"Konkurs postlarini {CHANNEL_USERNAME} kanalida kuzatib boring."
-            )
+        await callback.message.answer(
+            "🤖 <b>Botga xush kelibsiz!</b>\n\n"
+            "✅ Nakrutka\n"
+            "💎 Donat\n"
+            "⭐ Stars\n"
+            "👑 Premium\n\n"
+            "xizmatlaridan foydalanish uchun pastdagi tugmani bosing 👇",
+            reply_markup=webapp_entry_keyboard(),
+        )
     else:
         await callback.answer("❌ Siz hali obuna bo'lmagansiz!", show_alert=True)
 
 
 @router.callback_query(F.data == "back_main")
 async def back_main(callback: CallbackQuery):
-    await callback.message.edit_text("Bosh menyu:")
-    await callback.message.edit_reply_markup(reply_markup=main_menu_keyboard())
+    await callback.message.edit_text("⚙️ Admin panel yopildi. Qayta ochish uchun /admin buyrug'ini yuboring.")
+    await callback.answer()
 
 
-# --- 3) Admin panel ---
-@router.callback_query(F.data == "admin_panel")
-async def admin_panel(callback: CallbackQuery):
-    if not is_admin(callback.from_user.id):
-        await callback.answer("⛔ Sizga ruxsat yo'q.", show_alert=True)
-        return
-    await callback.message.edit_text("⚙️ Admin panel:", reply_markup=admin_panel_keyboard())
+# --- 3) Admin panel: FAQAT /admin buyrug'i orqali ochiladi ---
+@router.message(Command("admin"))
+async def admin_command(message: Message, state: FSMContext):
+    await state.clear()
+    if not is_admin(message.from_user.id):
+        return  # oddiy foydalanuvchilarga hech qanday javob berilmaydi
+    await message.answer("⚙️ Admin panel:", reply_markup=admin_panel_keyboard())
 
 
 @router.callback_query(F.data == "add_post")
@@ -517,6 +548,7 @@ async def stop_battle(callback: CallbackQuery):
 async def main():
     global BOT_USERNAME
     init_db()
+    cleanup_admin_participants()
     me = await bot.get_me()
     BOT_USERNAME = me.username
     logging.info(f"Bot ishga tushdi: @{BOT_USERNAME}")
