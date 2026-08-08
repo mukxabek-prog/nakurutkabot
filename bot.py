@@ -1,186 +1,370 @@
 import asyncio
-from aiogram import Bot, Dispatcher, F, types
-from aiogram.filters import Command
+import logging
+import sqlite3
+from typing import Optional
+
+from aiogram import Bot, Dispatcher, Router, F
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode, ChatMemberStatus
+from aiogram.filters import CommandStart, CommandObject
 from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import StatesGroup
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import (
+    Message,
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+)
+from aiogram.exceptions import TelegramBadRequest
 
-TOKEN = "8952379767:AAEFYcjaQf-d7fc1NjUBKD_rQPgVCHwjz-U"
-ADMIN_ID = 8866852203
-CHANNEL_ID = "@trade_chanel_uz"  
-CHANNEL_USERNAME = "trade_chanel_uz" 
+# ==================== SOZLAMALAR ====================
+BOT_TOKEN = "8952379767:AAEFYcjaQf-d7fc1NjUBKD_rQPgVCHwjz-U"           # @BotFather dan olingan token
+CHANNEL_USERNAME = "@trade_chanel_uz"           # majburiy obuna bo'ladigan kanal
+CHANNEL_ID = "@trade_chanel_uz"                 # Battle posti shu yerga tashlanadi (o'sha kanal)
+ADMIN_IDS = [8866852203]                         # admin(lar) Telegram ID raqami(lari)
+DB_PATH = "contest.db"
 
-bot = Bot(token=TOKEN)
-dp = Dispatcher(storage=MemoryStorage()) if 'MemoryStorage' in globals() else Dispatcher()
+logging.basicConfig(level=logging.INFO)
 
-# Ishtirokchilar bazasi
-participants = {} # {user_id: {"name": "Ism", "votes": 0}}
-voted_users = {}  # {voter_id: candidate_id}
+bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+dp = Dispatcher(storage=MemoryStorage())
+router = Router()
+dp.include_router(router)
+
+BOT_USERNAME: Optional[str] = None  # /start?=vote_ID deep-link havolasi uchun runtime'da olinadi
+
+
+# ==================== DATABASE ====================
+def db_connect():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def init_db():
+    conn = db_connect()
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS participants (
+            user_id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL,
+            votes INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS votes (
+            voter_id INTEGER PRIMARY KEY,
+            candidate_id INTEGER NOT NULL
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS battle_post (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            chat_id INTEGER,
+            message_id INTEGER
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+
+def add_participant(user_id: int, name: str):
+    conn = db_connect()
+    conn.execute(
+        "INSERT OR REPLACE INTO participants (user_id, name, votes) "
+        "VALUES (?, ?, COALESCE((SELECT votes FROM participants WHERE user_id=?), 0))",
+        (user_id, name, user_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_participant(user_id: int):
+    conn = db_connect()
+    row = conn.execute("SELECT * FROM participants WHERE user_id=?", (user_id,)).fetchone()
+    conn.close()
+    return row
+
+
+def get_all_participants():
+    conn = db_connect()
+    rows = conn.execute("SELECT * FROM participants ORDER BY votes DESC, name ASC").fetchall()
+    conn.close()
+    return rows
+
+
+def has_voted(voter_id: int) -> bool:
+    conn = db_connect()
+    row = conn.execute("SELECT 1 FROM votes WHERE voter_id=?", (voter_id,)).fetchone()
+    conn.close()
+    return row is not None
+
+
+def add_vote(voter_id: int, candidate_id: int):
+    conn = db_connect()
+    conn.execute("INSERT INTO votes (voter_id, candidate_id) VALUES (?, ?)", (voter_id, candidate_id))
+    conn.execute("UPDATE participants SET votes = votes + 1 WHERE user_id=?", (candidate_id,))
+    conn.commit()
+    conn.close()
+
+
+def save_battle_post(chat_id: int, message_id: int):
+    conn = db_connect()
+    conn.execute("DELETE FROM battle_post")
+    conn.execute("INSERT INTO battle_post (id, chat_id, message_id) VALUES (1, ?, ?)", (chat_id, message_id))
+    conn.commit()
+    conn.close()
+
+
+def get_battle_post():
+    conn = db_connect()
+    row = conn.execute("SELECT * FROM battle_post WHERE id=1").fetchone()
+    conn.close()
+    return row
+
+
+# ==================== FSM HOLATLARI ====================
+class RegisterStates(StatesGroup):
+    waiting_name = State()
+
+
+# ==================== YORDAMCHI FUNKSIYALAR ====================
+def is_admin(user_id: int) -> bool:
+    return user_id in ADMIN_IDS
+
 
 async def check_subscription(user_id: int) -> bool:
     try:
-        member = await bot.get_chat_member(chat_id=f"@{CHANNEL_USERNAME}", user_id=user_id)
-        if member.status in ["creator", "administrator", "member"]:
-            return True
-    except Exception:
-        pass
-    return False
+        member = await bot.get_chat_member(chat_id=CHANNEL_USERNAME, user_id=user_id)
+        return member.status not in (ChatMemberStatus.LEFT, ChatMemberStatus.KICKED)
+    except TelegramBadRequest:
+        return False
 
-@dp.message(Command("start"))
-async def cmd_start(message: types.Message, state: FSMContext):
-    user_id = message.from_user.id
-    args = message.text.split()
-    
-    # AGAR OVOZ BERISH UCHUN KELGAN BO'LSA
-    if len(args) > 1 and args[1].startswith("vote_"):
-        candidate_id = int(args[1].split("_")[1])
-        
-        # Obunani tekshiramiz
-        if not await check_subscription(user_id):
-            kb = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="📢 Kanalga obuna bo'lish", url=f"https://t.me/{CHANNEL_USERNAME}")],
-                [InlineKeyboardButton(text="✅ Obunani tekshirish", callback_data=f"check_vote_{candidate_id}")]
-            ])
-            await message.answer("⚠️ Ovoz berish uchun avval kanalimizga obuna bo'ling:", reply_markup=kb)
-            return
-        
-        await execute_vote(message, user_id, candidate_id)
-        return
 
-    # ODDIY START (Foydalanuvchi yoki Admin)
-    if not await check_subscription(user_id):
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="📢 Kanalga obuna bo'lish", url=f"https://t.me/{CHANNEL_USERNAME}")],
-            [InlineKeyboardButton(text="✅ Obunani tekshirish", callback_data="check_sub")]
-        ])
-        await message.answer("⚠️ Botdan foydalanish uchun avval kanalimizga obuna bo'ling:", reply_markup=kb)
-        return
-
-    if user_id == ADMIN_ID:
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="⚙️ Admin Panel", callback_data="admin_panel")]
-        ])
-        await message.answer("Xush kelibsiz, Admin!", reply_markup=kb)
-        return
-
-    # Oddiy foydalanuvchi uchun konkursga qo'shilish taklifi
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🏆 Konkursda qatnashish (Nik yuborish)", callback_data="add_participant")]
+def subscribe_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text="📢 Kanalga obuna bo'lish",
+            url=f"https://t.me/{CHANNEL_USERNAME.lstrip('@')}",
+        )],
+        [InlineKeyboardButton(text="✅ Obunani tekshirish", callback_data="check_sub")],
     ])
-    await message.answer("🎉 Xush kelibsiz! Konkursda qatnashish uchun pastdagi tugmani bosing:", reply_markup=kb)
 
 
-@dp.callback_query(F.data == "check_sub")
-async def process_check_sub(callback: types.CallbackQuery):
-    if await check_subscription(callback.from_user.id):
-        await callback.message.delete()
-        user_id = callback.from_user.id
-        if user_id == ADMIN_ID:
-            kb = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="⚙️ Admin Panel", callback_data="admin_panel")]
-            ])
-            await callback.message.answer("Rahmat! Obuna tasdiqlandi.", reply_markup=kb)
-            return
-        
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🏆 Konkursda qatnashish (Nik yuborish)", callback_data="add_participant")]
+def main_menu_keyboard(user_id: int) -> InlineKeyboardMarkup:
+    buttons = [
+        [InlineKeyboardButton(text="🏆 Konkursda qatnashish", callback_data="register")],
+    ]
+    if is_admin(user_id):
+        buttons.append([InlineKeyboardButton(text="⚙️ Admin panel", callback_data="admin_panel")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def admin_panel_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📢 Kanalga Battle postini tashlash", callback_data="post_battle")],
+        [InlineKeyboardButton(text="🔄 Ovozlarni yangilash", callback_data="refresh_battle")],
+        [InlineKeyboardButton(text="⬅️ Orqaga", callback_data="back_main")],
+    ])
+
+
+def build_battle_text_and_kb():
+    """Kanalga tashlanadigan Battle postining matni va tugmalarini quradi."""
+    participants = get_all_participants()
+    if not participants:
+        return None, None
+
+    lines = ["🔥 <b>BATTLE / OVOZ BERISH</b> 🔥\n", "Ishtirokchiga ovoz berish uchun tugmani bosing:\n"]
+    kb_rows = []
+    for i, p in enumerate(participants, start=1):
+        lines.append(f"{i}. <b>{p['name']}</b> — {p['votes']} ovoz")
+        kb_rows.append([
+            InlineKeyboardButton(
+                text=f"🗳 {p['name']} ({p['votes']})",
+                url=f"https://t.me/{BOT_USERNAME}?start=vote_{p['user_id']}",
+            )
         ])
-        await callback.message.answer("Rahmat! Obuna tasdiqlandi. Konkursda qatnashishingiz mumkin:", reply_markup=kb)
+    text = "\n".join(lines)
+    kb = InlineKeyboardMarkup(inline_keyboard=kb_rows)
+    return text, kb
+
+
+# ==================== HANDLERLAR ====================
+
+# --- 1) Deep-link orqali /start (masalan ovoz berish uchun) ---
+@router.message(CommandStart(deep_link=True))
+async def start_with_payload(message: Message, command: CommandObject, state: FSMContext):
+    payload = command.args or ""
+
+    if payload.startswith("vote_"):
+        # ====== OVOZ BERISH SSENARIYSI: bosh menyu OCHILMAYDI ======
+        try:
+            candidate_id = int(payload.split("_", 1)[1])
+        except (IndexError, ValueError):
+            await message.answer("❌ Xato havola.")
+            return
+
+        voter_id = message.from_user.id
+
+        # Majburiy obunani baribir tekshiramiz
+        if not await check_subscription(voter_id):
+            await message.answer(
+                "❌ Ovoz berish uchun avval kanalga obuna bo'ling:",
+                reply_markup=subscribe_keyboard(),
+            )
+            return
+
+        candidate = get_participant(candidate_id)
+        if candidate is None:
+            await message.answer("❌ Bunday ishtirokchi topilmadi.")
+            return
+
+        if voter_id == candidate_id:
+            await message.answer("🚫 Siz o'zingizga ovoz bera olmaysiz!")
+            return
+
+        if has_voted(voter_id):
+            await message.answer("⚠️ Siz allaqachon ovoz bergansiz. Faqat 1 marta ovoz berish mumkin.")
+            return
+
+        add_vote(voter_id, candidate_id)
+        await message.answer(
+            f"✅ Ovozingiz qabul qilindi!\nSiz <b>{candidate['name']}</b>ga ovoz berdingiz."
+        )
+        return
+
+    # Boshqa turdagi payload bo'lsa — oddiy /start kabi ishlaymiz
+    await cmd_start(message, state)
+
+
+# --- 2) Oddiy /start (payload'siz) ---
+@router.message(CommandStart())
+async def cmd_start(message: Message, state: FSMContext):
+    await state.clear()
+    user_id = message.from_user.id
+
+    if not await check_subscription(user_id):
+        await message.answer(
+            "👋 Assalomu alaykum!\n\n"
+            "Botdan foydalanish uchun avval quyidagi kanalga obuna bo'ling:",
+            reply_markup=subscribe_keyboard(),
+        )
+        return
+
+    await message.answer(
+        "👋 Xush kelibsiz!\n\nKonkursimizga xush kelibsiz. Pastdagi tugmalardan foydalaning:",
+        reply_markup=main_menu_keyboard(user_id),
+    )
+
+
+@router.callback_query(F.data == "check_sub")
+async def check_sub_callback(callback: CallbackQuery):
+    if await check_subscription(callback.from_user.id):
+        await callback.message.edit_text("✅ Obuna tasdiqlandi!")
+        await callback.message.answer(
+            "Bosh menyu:",
+            reply_markup=main_menu_keyboard(callback.from_user.id),
+        )
     else:
-        await callback.answer("Siz hali kanalga obuna bo'lmadingiz!", show_alert=True)
+        await callback.answer("❌ Siz hali obuna bo'lmagansiz!", show_alert=True)
 
 
-@dp.callback_query(F.data == "add_participant")
-async def ask_participant_name(callback: types.CallbackQuery, state: FSMContext):
-    await callback.message.answer("✍️ Konkursda qatnashish uchun o'zingizning nik yoki ismingizni yuboring:")
-    await state.set_state("waiting_for_name")
+@router.callback_query(F.data == "back_main")
+async def back_main(callback: CallbackQuery):
+    await callback.message.edit_text("Bosh menyu:")
+    await callback.message.edit_reply_markup(reply_markup=main_menu_keyboard(callback.from_user.id))
+
+
+# --- 3) Ro'yxatdan o'tish ---
+@router.callback_query(F.data == "register")
+async def register_start(callback: CallbackQuery, state: FSMContext):
+    existing = get_participant(callback.from_user.id)
+    if existing:
+        await callback.answer("Siz allaqachon ro'yxatdan o'tgansiz ✅", show_alert=True)
+        return
+
+    await callback.message.answer("✏️ Konkursda ishtirok etish uchun ism/nikingizni yuboring:")
+    await state.set_state(RegisterStates.waiting_name)
     await callback.answer()
 
 
-@dp.message(F.state == "waiting_for_name")
-async def save_participant(message: types.Message, state: FSMContext):
-    user_id = message.from_user.id
-    name = message.text
-    participants[user_id] = {"name": name, "votes": 0}
+@router.message(RegisterStates.waiting_name)
+async def register_finish(message: Message, state: FSMContext):
+    name = (message.text or "").strip()
+    if not name:
+        await message.answer("❌ Iltimos, matn ko'rinishida ism yuboring.")
+        return
+
+    add_participant(message.from_user.id, name)
     await state.clear()
-    await message.answer(f"✅ Tabriklayman, **{name}**! Siz konkurs ro'yxatiga muvaffaqiyatli qo'shildingiz.")
+    await message.answer(
+        f"🎉 Tabriklaymiz, <b>{name}</b>! Siz konkurs ishtirokchisi sifatida ro'yxatdan o'tdingiz."
+    )
 
 
-@dp.callback_query(F.data.startswith("check_vote_"))
-async def process_check_vote(callback: types.CallbackQuery):
-    candidate_id = int(callback.data.split("_")[2])
-    user_id = callback.from_user.id
-    
-    if await check_subscription(user_id):
-        await callback.message.delete()
-        await execute_vote(callback.message, user_id, candidate_id)
-    else:
-        await callback.answer("Siz hali kanalga obuna bo'lmadingiz!", show_alert=True)
-
-
-async def execute_vote(message: types.Message, user_id: int, candidate_id: int):
-    if user_id in voted_users:
-        await message.answer("⚠️ Siz allaqachon ovoz bergansiz! Faqat 1 marta ovoz berish mumkin.")
+# --- 4) Admin panel ---
+@router.callback_query(F.data == "admin_panel")
+async def admin_panel(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("⛔ Sizga ruxsat yo'q.", show_alert=True)
         return
-    
-    if candidate_id not in participants:
-        await message.answer("❌ Bu ishtirokchi topilmadi.")
-        return
-        
-    if user_id == candidate_id:
-        await message.answer("❌ O'zingizga ovoz bera olmaysiz!")
+    await callback.message.edit_text("⚙️ Admin panel:", reply_markup=admin_panel_keyboard())
+
+
+@router.callback_query(F.data == "post_battle")
+async def post_battle(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("⛔ Sizga ruxsat yo'q.", show_alert=True)
         return
 
-    voted_users[user_id] = candidate_id
-    participants[candidate_id]["votes"] += 1
-    
-    c_name = participants[candidate_id]["name"]
-    c_votes = participants[candidate_id]["votes"]
-    
-    await message.answer(f"✅ Ovozingiz muvaffaqiyatli qabul qilindi!\n\n🏆 Ishtirokchi: <b>{c_name}</b>\n⭐ Jami ovozlar: {c_votes} ta")
-
-
-# --- ADMIN PANEL ---
-@dp.callback_query(F.data == "admin_panel", F.from_user.id == ADMIN_ID)
-async def admin_panel(callback: types.CallbackQuery):
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📢 Kanalga Battle postini tashlash", callback_data="publish_battle")],
-        [InlineKeyboardButton(text="❌ Chiqish", callback_data="close_menu")]
-    ])
-    await callback.message.edit_text("🔧 Admin panel:", reply_markup=kb)
-
-
-@dp.callback_query(F.data == "publish_battle", F.from_user.id == ADMIN_ID)
-async def publish_battle_post(callback: types.CallbackQuery):
-    if not participants:
-        await callback.answer("Hozircha ishtirokchilar yo'q!", show_alert=True)
+    text, kb = build_battle_text_and_kb()
+    if text is None:
+        await callback.answer("❌ Hozircha ishtirokchilar yo'q.", show_alert=True)
         return
 
-    bot_info = await bot.get_me()
-    keyboard_buttons = []
-    for u_id, data in participants.items():
-        btn_text = f"{data['name']} — {data['votes']} 🗳"
-        btn_url = f"https://t.me/{bot_info.username}?start=vote_{u_id}"
-        keyboard_buttons.append([InlineKeyboardButton(text=btn_text, url=btn_url)])
-    
-    keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
-    text = "🏆 **BATL BOSHLANDI!** 🥳\n\nQuyidagi ishtirokchilardan biriga ovoz bering:"
-    
+    sent = await bot.send_message(chat_id=CHANNEL_ID, text=text, reply_markup=kb)
+    save_battle_post(sent.chat.id, sent.message_id)
+    await callback.answer("✅ Battle posti kanalga joylandi!", show_alert=True)
+
+
+@router.callback_query(F.data == "refresh_battle")
+async def refresh_battle(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("⛔ Sizga ruxsat yo'q.", show_alert=True)
+        return
+
+    post = get_battle_post()
+    if post is None:
+        await callback.answer("❌ Hali battle posti yuborilmagan.", show_alert=True)
+        return
+
+    text, kb = build_battle_text_and_kb()
+    if text is None:
+        await callback.answer("❌ Ishtirokchilar yo'q.", show_alert=True)
+        return
+
     try:
-        await bot.send_message(chat_id=CHANNEL_ID, text=text, reply_markup=keyboard, parse_mode="Markdown")
-        await callback.message.answer("✅ Battle posti kanalga yuborildi!")
-    except Exception as e:
-        await callback.message.answer(f"❌ Xatolik: {e}")
+        await bot.edit_message_text(
+            chat_id=post["chat_id"], message_id=post["message_id"], text=text, reply_markup=kb
+        )
+        await callback.answer("✅ Ovozlar yangilandi!", show_alert=True)
+    except TelegramBadRequest as e:
+        if "message is not modified" in str(e):
+            await callback.answer("Hech narsa o'zgarmadi.", show_alert=True)
+        else:
+            await callback.answer(f"❌ Xatolik: {e}", show_alert=True)
 
 
-@dp.callback_query(F.data == "close_menu")
-async def close_menu(callback: types.CallbackQuery):
-    await callback.message.delete()
-
-
+# ==================== ISHGA TUSHIRISH ====================
 async def main():
-    print("Bot ishga tushdi...")
+    global BOT_USERNAME
+    init_db()
+    me = await bot.get_me()
+    BOT_USERNAME = me.username
+    logging.info(f"Bot ishga tushdi: @{BOT_USERNAME}")
     await dp.start_polling(bot)
+
 
 if __name__ == "__main__":
     asyncio.run(main())
