@@ -14,10 +14,18 @@ CHANNEL_USERNAME = "trade_chanel_uz"
 bot = Bot(token=TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
+# Ishtirokchi nikini qabul qilish uchun holat
+class ContestState(StatesGroup):
+    waiting_for_nickname = State()
+
+# Admin uchun so'rovnoma yaratish holatlari
 class CreatePoll(StatesGroup):
     waiting_for_text = State()
     waiting_for_photo = State()
     preview = State()
+
+# Vaqtinchalik ishtirokchilar ro'yxati {user_id: nickname}
+participants = {}
 
 
 async def check_subscription(user_id: int) -> bool:
@@ -31,7 +39,7 @@ async def check_subscription(user_id: int) -> bool:
 
 
 @dp.message(Command("start"))
-async def cmd_start(message: types.Message):
+async def cmd_start(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     
     if not await check_subscription(user_id):
@@ -42,39 +50,50 @@ async def cmd_start(message: types.Message):
         await message.answer("⚠️ Botdan foydalanish uchun avval kanalimizga obuna bo'ling:", reply_markup=kb)
         return
 
-    # Kanalga qo'shilish tugmasidan kelganda ko'rsatiladigan menyu
+    # Agar start bosilganda to'g'ridan-to'g'ri nik kiritishni so'rash
     kb = []
     if user_id == ADMIN_ID:
         kb.append([InlineKeyboardButton(text="⚙️ Admin Panel", callback_data="admin_panel")])
     
-    kb.append([InlineKeyboardButton(text="🏆 Konkursda qatnashish / Nik qo'shish", callback_data="join_contest")])
+    kb.append([InlineKeyboardButton(text="🏆 Konkursga qo'shilish (Nik yuborish)", callback_data="start_join")])
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=kb)
-    await message.answer("🎉 Xush kelibsiz! Konkurs botiga muvaffaqiyatli kirdingiz.", reply_markup=keyboard)
+    await message.answer("🎉 Xush kelibsiz! Konkurs botiga muvaffaqiyatli kirdingiz. Ishtirok etish uchun pastdagi tugmani bosing:", reply_markup=keyboard)
 
 
 @dp.callback_query(F.data == "check_sub")
 async def process_check_sub(callback: types.CallbackQuery):
     if await check_subscription(callback.from_user.id):
         await callback.message.delete()
-        await callback.message.answer("Rahmat! Obuna tasdiqlandi.")
-        
-        # Asosiy menyuni chiqarish
         user_id = callback.from_user.id
         kb = []
         if user_id == ADMIN_ID:
             kb.append([InlineKeyboardButton(text="⚙️ Admin Panel", callback_data="admin_panel")])
-        kb.append([InlineKeyboardButton(text="🏆 Konkursda qatnashish / Nik qo'shish", callback_data="join_contest")])
+        kb.append([InlineKeyboardButton(text="🏆 Konkursga qo'shilish (Nik yuborish)", callback_data="start_join")])
         
-        await callback.message.answer("Kerakli bo'limni tanlang:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+        await callback.message.answer("Rahmat! Obuna tasdiqlandi. Kerakli bo'limni tanlang:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
     else:
         await callback.answer("Siz hali kanalga obuna bo'lmadingiz!", show_alert=True)
 
 
-@dp.callback_query(F.data == "join_contest")
-async def join_contest_callback(callback: types.CallbackQuery):
-    await callback.message.answer("✅ Siz muvaffaqiyatli ro'yxatga olindingiz! Tez orada ovoz berish boshlanadi.")
+# Konkursga qo'shilish tugmasi bosilganda nik so'rash
+@dp.callback_query(F.data == "start_join")
+async def ask_nickname(callback: types.CallbackQuery, state: FSMContext):
+    await callback.message.answer("✍️ Iltimos, konkursda qatnashish uchun o'zingizning **nikingizni yoki ismingizni** yuboring:")
+    await state.set_state(ContestState.waiting_for_nickname)
     await callback.answer()
+
+
+# Foydalanuvchi yuborgan nikni qabul qilib saqlash
+@dp.message(ContestState.waiting_for_nickname)
+async def save_nickname(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    nickname = message.text
+    
+    participants[user_id] = nickname
+    await state.clear()
+    
+    await message.answer(f"✅ Tabriklayman! Sizningniki (**{nickname}**) muvaffaqiyatli ro'yxatga qo'shildi! 🚀")
 
 
 # --- ADMIN PANEL ---
