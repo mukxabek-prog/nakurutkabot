@@ -1,6 +1,6 @@
 import asyncio
 from aiogram import Bot, Dispatcher, F, types
-from aiogram.filters import Command
+from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -50,38 +50,36 @@ async def cmd_start(message: types.Message, state: FSMContext):
         await message.answer("⚠️ Botdan foydalanish uchun avval kanalimizga obuna bo'ling:", reply_markup=kb)
         return
 
-    # Agar start bosilganda to'g'ridan-to'g'ri nik kiritishni so'rash
-    kb = []
+    # Agar admin bo'lsa va oddiy /start yuborsa admin panel chiqadi
     if user_id == ADMIN_ID:
-        kb.append([InlineKeyboardButton(text="⚙️ Admin Panel", callback_data="admin_panel")])
-    
-    kb.append([InlineKeyboardButton(text="🏆 Konkursga qo'shilish (Nik yuborish)", callback_data="start_join")])
-    
-    keyboard = InlineKeyboardMarkup(inline_keyboard=kb)
-    await message.answer("🎉 Xush kelibsiz! Konkurs botiga muvaffaqiyatli kirdingiz. Ishtirok etish uchun pastdagi tugmani bosing:", reply_markup=keyboard)
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="⚙️ Admin Panel", callback_data="admin_panel")]
+        ])
+        await message.answer("Xush kelibsiz, Admin!", reply_markup=kb)
+        return
+
+    # Oddiy foydalanuvchi kanalga qo'shilish tugmasini bosganda to'g'ridan-to'g'ri nik so'raymiz
+    await message.answer("🏆 Konkursga xush kelibsiz!\n\n✍️ Ishtirok etish uchun o'zingizning **nikingizni yoki ismingizni** yuboring:")
+    await state.set_state(ContestState.waiting_for_nickname)
 
 
 @dp.callback_query(F.data == "check_sub")
-async def process_check_sub(callback: types.CallbackQuery):
+async def process_check_sub(callback: types.CallbackQuery, state: FSMContext):
     if await check_subscription(callback.from_user.id):
         await callback.message.delete()
         user_id = callback.from_user.id
-        kb = []
-        if user_id == ADMIN_ID:
-            kb.append([InlineKeyboardButton(text="⚙️ Admin Panel", callback_data="admin_panel")])
-        kb.append([InlineKeyboardButton(text="🏆 Konkursga qo'shilish (Nik yuborish)", callback_data="start_join")])
         
-        await callback.message.answer("Rahmat! Obuna tasdiqlandi. Kerakli bo'limni tanlang:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+        if user_id == ADMIN_ID:
+            kb = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="⚙️ Admin Panel", callback_data="admin_panel")]
+            ])
+            await callback.message.answer("Rahmat! Obuna tasdiqlandi.", reply_markup=kb)
+            return
+
+        await callback.message.answer("Rahmat! Obuna tasdiqlandi.\n\n✍️ Konkursda qatnashish uchun o'zingizning **nikingizni yoki ismingizni** yuboring:")
+        await state.set_state(ContestState.waiting_for_nickname)
     else:
         await callback.answer("Siz hali kanalga obuna bo'lmadingiz!", show_alert=True)
-
-
-# Konkursga qo'shilish tugmasi bosilganda nik so'rash
-@dp.callback_query(F.data == "start_join")
-async def ask_nickname(callback: types.CallbackQuery, state: FSMContext):
-    await callback.message.answer("✍️ Iltimos, konkursda qatnashish uchun o'zingizning **nikingizni yoki ismingizni** yuboring:")
-    await state.set_state(ContestState.waiting_for_nickname)
-    await callback.answer()
 
 
 # Foydalanuvchi yuborgan nikni qabul qilib saqlash
@@ -93,7 +91,7 @@ async def save_nickname(message: types.Message, state: FSMContext):
     participants[user_id] = nickname
     await state.clear()
     
-    await message.answer(f"✅ Tabriklayman! Sizningniki (**{nickname}**) muvaffaqiyatli ro'yxatga qo'shildi! 🚀")
+    await message.answer(f"✅ Tabriklayman! Nikingiz (**{nickname}**) muvaffaqiyatli qabul qilindi va ro'yxatga qo'shildi! 🚀")
 
 
 # --- ADMIN PANEL ---
@@ -175,6 +173,7 @@ async def publish_poll(callback: types.CallbackQuery, state: FSMContext):
     photo = data.get("photo")
     
     bot_info = await bot.get_me()
+    # Kanalga tashlanadigan postdagi tugma
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="➕ Qo'shilish", url=f"https://t.me/{bot_info.username}?start=join")]
     ])
