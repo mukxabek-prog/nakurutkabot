@@ -129,6 +129,11 @@ class RegisterStates(StatesGroup):
     waiting_name = State()
 
 
+class AdminPostStates(StatesGroup):
+    waiting_text = State()
+    waiting_photo = State()
+
+
 # ==================== YORDAMCHI FUNKSIYALAR ====================
 def is_admin(user_id: int) -> bool:
     return user_id in ADMIN_IDS
@@ -163,9 +168,22 @@ def main_menu_keyboard(user_id: int) -> InlineKeyboardMarkup:
 
 def admin_panel_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="➕ Qo'shish (Kanalga taklif posti)", callback_data="add_join_post")],
         [InlineKeyboardButton(text="📢 Kanalga Battle postini tashlash", callback_data="post_battle")],
         [InlineKeyboardButton(text="🔄 Ovozlarni yangilash", callback_data="refresh_battle")],
         [InlineKeyboardButton(text="⬅️ Orqaga", callback_data="back_main")],
+    ])
+
+
+def skip_photo_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⏭ Rasmsiz yuborish (Skip)", callback_data="skip_photo")],
+    ])
+
+
+def join_channel_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✅ Qo'shilish", url=f"https://t.me/{BOT_USERNAME}?start=join")],
     ])
 
 
@@ -231,6 +249,28 @@ async def start_with_payload(message: Message, command: CommandObject, state: FS
         add_vote(voter_id, candidate_id)
         await message.answer(
             f"✅ Ovozingiz qabul qilindi!\nSiz <b>{candidate['name']}</b>ga ovoz berdingiz."
+        )
+        return
+
+    if payload == "join":
+        # ====== KANALDAGI TAKLIF POSTIDAN "✅ Qo'shilish" bosilganda ======
+        user_id = message.from_user.id
+
+        if not await check_subscription(user_id):
+            await message.answer(
+                "❌ Qatnashish uchun avval kanalga obuna bo'ling:",
+                reply_markup=subscribe_keyboard(),
+            )
+            return
+
+        if get_participant(user_id):
+            await message.answer("✅ Siz allaqachon konkurs ishtirokchisi sifatida ro'yxatdan o'tgansiz.")
+            return
+
+        name = message.from_user.full_name or message.from_user.username or f"User{user_id}"
+        add_participant(user_id, name)
+        await message.answer(
+            f"🎉 Tabriklaymiz, <b>{name}</b>! Siz konkurs ishtirokchisi sifatida avtomatik qo'shildingiz."
         )
         return
 
@@ -354,6 +394,64 @@ async def refresh_battle(callback: CallbackQuery):
             await callback.answer("Hech narsa o'zgarmadi.", show_alert=True)
         else:
             await callback.answer(f"❌ Xatolik: {e}", show_alert=True)
+
+
+@router.callback_query(F.data == "add_join_post")
+async def add_join_post(callback: CallbackQuery, state: FSMContext):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("⛔ Sizga ruxsat yo'q.", show_alert=True)
+        return
+
+    await callback.message.answer("✏️ Kanalga tashlanadigan taklif posti uchun matnni yuboring:")
+    await state.set_state(AdminPostStates.waiting_text)
+    await callback.answer()
+
+
+@router.message(AdminPostStates.waiting_text)
+async def add_join_post_text(message: Message, state: FSMContext):
+    text = (message.text or "").strip()
+    if not text:
+        await message.answer("❌ Iltimos, matn ko'rinishida yuboring.")
+        return
+
+    await state.update_data(post_text=text)
+    await message.answer(
+        "🖼 Endi rasm yuboring.\n\nAgar rasmsiz yubormoqchi bo'lsangiz, pastdagi tugmani bosing:",
+        reply_markup=skip_photo_keyboard(),
+    )
+    await state.set_state(AdminPostStates.waiting_photo)
+
+
+@router.message(AdminPostStates.waiting_photo, F.photo)
+async def add_join_post_photo(message: Message, state: FSMContext):
+    data = await state.get_data()
+    text = data.get("post_text", "")
+    photo_id = message.photo[-1].file_id
+
+    await bot.send_photo(
+        chat_id=CHANNEL_ID, photo=photo_id, caption=text, reply_markup=join_channel_keyboard()
+    )
+    await state.clear()
+    await message.answer("✅ Post rasm bilan kanalga joylandi!")
+
+
+@router.message(AdminPostStates.waiting_photo)
+async def add_join_post_wrong_content(message: Message):
+    await message.answer(
+        "❌ Iltimos, rasm yuboring yoki 'Skip' tugmasini bosing.",
+        reply_markup=skip_photo_keyboard(),
+    )
+
+
+@router.callback_query(AdminPostStates.waiting_photo, F.data == "skip_photo")
+async def add_join_post_skip(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    text = data.get("post_text", "")
+
+    await bot.send_message(chat_id=CHANNEL_ID, text=text, reply_markup=join_channel_keyboard())
+    await state.clear()
+    await callback.message.answer("✅ Post (rasmsiz) kanalga joylandi!")
+    await callback.answer()
 
 
 # ==================== ISHGA TUSHIRISH ====================
