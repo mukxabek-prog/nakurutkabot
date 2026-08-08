@@ -8,7 +8,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 TOKEN = "8952379767:AAEFYcjaQf-d7fc1NjUBKD_rQPgVCHwjz-U"
 ADMIN_ID = 8866852203
-CHANNEL_ID = "@Chanel_trade"  
+CHANNEL_ID = "@trade_chanel_uz"  
 CHANNEL_USERNAME = "trade_chanel_uz" 
 
 bot = Bot(token=TOKEN)
