@@ -1,1 +1,372 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<title>Nakurutka | Donat | Stars | Premium</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #08080D;
+    --surface: #14141D;
+    --surface-2: #1C1C28;
+    --gold: #F2C94C;
+    --violet: #8B7CF6;
+    --text: #F5F5F7;
+    --muted: #8E8E9B;
+    --border: rgba(255,255,255,0.08);
+  }
+  *{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body{
+    margin:0; padding:0; height:100%; width:100%;
+    background: var(--bg); color: var(--text);
+    font-family: 'Inter', sans-serif;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
 
+  /* ============ INTRO / SPLASH VIDEO ============ */
+  #intro{
+    position: fixed; inset: 0;
+    background: #000;
+    z-index: 100;
+    display: flex; align-items: center; justify-content: center;
+    transition: opacity .6s ease, visibility .6s ease;
+  }
+  #intro.hidden{ opacity: 0; visibility: hidden; pointer-events: none; }
+
+  #intro-video{
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    object-fit: cover;
+    object-position: center;
+    background: #000;
+  }
+
+  #intro-scrim{
+    position: absolute; inset: 0;
+    background: linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0) 30%, rgba(0,0,0,0) 60%, rgba(8,8,13,0.85) 100%);
+    pointer-events: none;
+  }
+
+  #intro-skip{
+    position: absolute; top: max(18px, env(safe-area-inset-top)); right: 18px;
+    background: rgba(20,20,29,0.55);
+    border: 1px solid rgba(255,255,255,0.18);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    font-size: 13px; font-weight: 500;
+    padding: 8px 14px;
+    border-radius: 100px;
+    backdrop-filter: blur(8px);
+    opacity: 0;
+    transition: opacity .4s ease;
+    display: flex; align-items: center; gap: 6px;
+  }
+  #intro-skip.show{ opacity: 1; }
+  #intro-skip:active{ transform: scale(0.96); }
+
+  #tap-to-start{
+    position: absolute; inset: 0;
+    display: none;
+    align-items: center; justify-content: center;
+    flex-direction: column;
+    gap: 18px;
+    background: rgba(8,8,13,0.55);
+    backdrop-filter: blur(2px);
+  }
+  #tap-to-start.show{ display: flex; }
+  #tap-to-start .ring{
+    width: 74px; height: 74px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(242,201,76,0.5);
+    display: flex; align-items: center; justify-content: center;
+    animation: pulse 1.8s ease-in-out infinite;
+  }
+  #tap-to-start .ring svg{ width: 26px; height: 26px; margin-left: 3px; }
+  #tap-to-start span{
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 14px; color: var(--muted); letter-spacing: 0.02em;
+  }
+  @keyframes pulse{
+    0%,100%{ box-shadow: 0 0 0 0 rgba(242,201,76,0.25); }
+    50%{ box-shadow: 0 0 0 14px rgba(242,201,76,0); }
+  }
+
+  /* ============ MAIN APP ============ */
+  #app{
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column;
+    padding: max(22px, env(safe-area-inset-top)) 20px max(22px, env(safe-area-inset-bottom));
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity .5s ease, transform .5s ease;
+  }
+  #app.in{ opacity: 1; transform: translateY(0); }
+
+  #stars-canvas{
+    position: fixed; inset: 0; z-index: -1;
+  }
+
+  .eyebrow{
+    font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--muted); font-weight: 500; margin: 0 0 6px 2px;
+  }
+  .greeting{
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: clamp(26px, 8vw, 34px);
+    font-weight: 700;
+    margin: 0 0 2px 2px;
+    line-height: 1.15;
+  }
+  .greeting .wave{ display: inline-block; animation: wave 1.6s ease-in-out .3s; transform-origin: 70% 70%; }
+  @keyframes wave{
+    0%,100%{ transform: rotate(0deg); }
+    15%{ transform: rotate(16deg); }
+    30%{ transform: rotate(-10deg); }
+    45%{ transform: rotate(14deg); }
+    60%{ transform: rotate(-4deg); }
+  }
+  .subtitle{
+    font-size: 14px; color: var(--muted); margin: 8px 2px 0; line-height: 1.5;
+    max-width: 34ch;
+  }
+
+  .grid{
+    margin-top: 28px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    flex: 1;
+  }
+  .card{
+    position: relative;
+    background: linear-gradient(160deg, var(--surface) 0%, var(--surface-2) 100%);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 18px;
+    display: flex; flex-direction: column; justify-content: space-between;
+    min-height: 132px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: transform .18s ease, border-color .18s ease;
+  }
+  .card:active{ transform: scale(0.965); border-color: rgba(255,255,255,0.2); }
+  .card .glow{
+    position: absolute; width: 90px; height: 90px; border-radius: 50%;
+    filter: blur(30px); opacity: 0.35; top: -20px; right: -20px;
+  }
+  .card .icon{ font-size: 24px; }
+  .card h3{
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 15.5px; font-weight: 600; margin: 10px 0 2px;
+  }
+  .card p{ font-size: 12px; color: var(--muted); margin: 0; line-height: 1.4; }
+
+  .card.nakrutka .glow{ background: #8B7CF6; }
+  .card.donat .glow{ background: #F27C4C; }
+  .card.stars .glow{ background: #F2C94C; }
+  .card.premium .glow{ background: #4CD8F2; }
+
+  #cta{
+    margin-top: 14px;
+    display: flex; align-items: center; justify-content: center;
+    gap: 8px;
+    background: linear-gradient(135deg, var(--gold), #E0A93A);
+    color: #1A1204;
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700; font-size: 15px;
+    border: none; border-radius: 16px;
+    padding: 15px;
+    width: 100%;
+  }
+  #cta:active{ transform: scale(0.98); }
+
+  .footnote{
+    text-align: center; font-size: 11px; color: #55555f;
+    margin-top: 12px;
+  }
+</style>
+</head>
+<body>
+
+  <!-- ============ INTRO SPLASH VIDEO ============ -->
+  <div id="intro">
+    <video id="intro-video" src="kirish.mp4" playsinline webkit-playsinline preload="auto"></video>
+    <div id="intro-scrim"></div>
+    <button id="intro-skip">O'tkazib yuborish →</button>
+    <div id="tap-to-start">
+      <div class="ring">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M6 4L19 12L6 20V4Z" fill="#F2C94C"/></svg>
+      </div>
+      <span>Boshlash uchun bosing</span>
+    </div>
+  </div>
+
+  <!-- ============ MAIN APP ============ -->
+  <div id="app">
+    <canvas id="stars-canvas"></canvas>
+
+    <div class="eyebrow" id="date-eyebrow">Xush kelibsiz</div>
+    <h1 class="greeting"><span id="greet-name">Salom</span> <span class="wave">👋</span></h1>
+    <p class="subtitle">Kerakli xizmatni tanlang — barchasi tez, xavfsiz va bir joyda.</p>
+
+    <div class="grid">
+      <div class="card nakrutka" data-service="nakrutka">
+        <div class="glow"></div>
+        <div class="icon">📈</div>
+        <div>
+          <h3>Nakrutka</h3>
+          <p>Obunachi, like va ko'rishlar</p>
+        </div>
+      </div>
+      <div class="card donat" data-service="donat">
+        <div class="glow"></div>
+        <div class="icon">💎</div>
+        <div>
+          <h3>Donat</h3>
+          <p>Kanal va guruhlarga donat</p>
+        </div>
+      </div>
+      <div class="card stars" data-service="stars">
+        <div class="glow"></div>
+        <div class="icon">⭐</div>
+        <div>
+          <h3>Stars</h3>
+          <p>Telegram Stars sotib olish</p>
+        </div>
+      </div>
+      <div class="card premium" data-service="premium">
+        <div class="glow"></div>
+        <div class="icon">👑</div>
+        <div>
+          <h3>Premium</h3>
+          <p>Telegram Premium obuna</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="footnote">Davom etish uchun kerakli xizmatni tanlang</div>
+  </div>
+
+<script>
+  // ---------- Telegram WebApp init ----------
+  const tg = window.Telegram ? window.Telegram.WebApp : null;
+  if (tg) {
+    tg.ready();
+    tg.expand();
+    try { tg.setHeaderColor('#08080D'); tg.setBackgroundColor('#08080D'); } catch(e) {}
+  }
+
+  // ---------- INTRO VIDEO LOGIC ----------
+  const introEl = document.getElementById('intro');
+  const video = document.getElementById('intro-video');
+  const skipBtn = document.getElementById('intro-skip');
+  const tapToStart = document.getElementById('tap-to-start');
+  const appEl = document.getElementById('app');
+
+  let introFinished = false;
+
+  function finishIntro(){
+    if (introFinished) return;
+    introFinished = true;
+    introEl.classList.add('hidden');
+    appEl.classList.add('in');
+    setTimeout(() => { introEl.style.display = 'none'; }, 650);
+  }
+
+  // Show "skip" button 1.5s after start
+  setTimeout(() => skipBtn.classList.add('show'), 1500);
+  skipBtn.addEventListener('click', finishIntro);
+
+  // When the video ends naturally -> go to main screen
+  video.addEventListener('ended', finishIntro);
+
+  // Try to autoplay WITH sound (works inside Telegram WebApp since
+  // opening the WebApp itself counts as a user gesture on most clients).
+  video.muted = false;
+  video.volume = 1;
+
+  const playPromise = video.play();
+  if (playPromise !== undefined) {
+    playPromise.catch(() => {
+      // Autoplay with sound was blocked by the browser ->
+      // show a "tap to start" overlay so the user unlocks audio manually.
+      tapToStart.classList.add('show');
+    });
+  }
+
+  tapToStart.addEventListener('click', () => {
+    video.muted = false;
+    video.play();
+    tapToStart.classList.remove('show');
+  });
+
+  // Safety net: never trap the user on the intro for more than 15s
+  setTimeout(finishIntro, 15000);
+
+  // ---------- Greeting with Telegram user's name ----------
+  try {
+    const user = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
+    if (user && user.first_name) {
+      document.getElementById('greet-name').textContent = 'Salom, ' + user.first_name;
+    }
+  } catch(e) {}
+
+  const hour = new Date().getHours();
+  const eyebrowText = hour < 6 ? 'Xayrli tun' : hour < 12 ? 'Xayrli tong' : hour < 18 ? 'Xayrli kun' : 'Xayrli kech';
+  document.getElementById('date-eyebrow').textContent = eyebrowText;
+
+  // ---------- Service cards ----------
+  document.querySelectorAll('.card').forEach(card => {
+    card.addEventListener('click', () => {
+      const service = card.dataset.service;
+      if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+      if (tg && tg.sendData) {
+        tg.sendData(JSON.stringify({ action: 'open_service', service }));
+      } else {
+        console.log('Tanlandi:', service);
+      }
+    });
+  });
+
+  // ---------- Ambient twinkling stars background ----------
+  const canvas = document.getElementById('stars-canvas');
+  const ctx = canvas.getContext('2d');
+  let stars = [];
+
+  function resize(){
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const count = Math.floor((canvas.width * canvas.height) / 9000);
+    stars = Array.from({length: count}, () => ({
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height,
+      r: Math.random() * 1.1 + 0.2,
+      a: Math.random(),
+      speed: Math.random() * 0.015 + 0.004,
+    }));
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  function drawStars(){
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (const s of stars) {
+      s.a += s.speed;
+      const alpha = (Math.sin(s.a) + 1) / 2 * 0.6 + 0.1;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(242,201,76,${alpha * 0.55})`;
+      ctx.fill();
+    }
+    requestAnimationFrame(drawStars);
+  }
+  drawStars();
+</script>
+
+</body>
+</html>
