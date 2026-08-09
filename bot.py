@@ -19,6 +19,7 @@ from aiogram.types import (
     WebAppInfo,
 )
 from aiogram.exceptions import TelegramBadRequest
+from aiohttp import web
 
 # ==================== SOZLAMALAR ====================
 # Bu qiymatlar endi kod ichida emas, balki ENVIRONMENT VARIABLES orqali olinadi.
@@ -557,6 +558,26 @@ async def stop_battle(callback: CallbackQuery):
     await callback.answer()
 
 
+# ==================== SOXTA WEB-SERVER (faqat Render "Web Service" uchun) ====================
+# Render "Web Service" turi doim biror portni tinglashni talab qiladi, aks holda
+# xizmatni "timed out" deb o'chirib qo'yadi. Bot esa polling rejimida ishlagani
+# uchun hech qanday portni o'zi ochmaydi - shu sababli shu yerda juda oddiy
+# HTTP server ochib qo'yamiz, u faqat Render tekshiruvidan o'tish uchun kerak.
+async def start_dummy_webserver():
+    async def health(request):
+        return web.Response(text="Bot ishlayapti ✅")
+
+    app = web.Application()
+    app.router.add_get("/", health)
+
+    port = int(os.getenv("PORT", "10000"))  # Render PORT'ni o'zi beradi
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, host="0.0.0.0", port=port)
+    await site.start()
+    logging.info(f"Dummy web-server {port}-portda ishga tushdi (Render uchun).")
+
+
 # ==================== ISHGA TUSHIRISH ====================
 async def main():
     global BOT_USERNAME
@@ -565,6 +586,8 @@ async def main():
     me = await bot.get_me()
     BOT_USERNAME = me.username
     logging.info(f"Bot ishga tushdi: @{BOT_USERNAME}")
+
+    await start_dummy_webserver()
     await dp.start_polling(bot)
 
 
