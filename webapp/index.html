@@ -3,272 +3,350 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
-<title>Nakurutka | Donat | Stars | Premium</title>
+<title>SMM Bot</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg: #08080D;
-    --surface: #14141D;
-    --surface-2: #1C1C28;
+    --bg: #07070B;
+    --surface: rgba(255,255,255,0.045);
+    --surface-2: rgba(255,255,255,0.08);
+    --glass-border: rgba(255,255,255,0.09);
     --gold: #F2C94C;
     --violet: #8B7CF6;
     --text: #F5F5F7;
-    --muted: #8E8E9B;
-    --border: rgba(255,255,255,0.08);
+    --muted: #8C8C99;
+    --danger: #F2604C;
+    --good: #4CF2A0;
   }
   *{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body{
     margin:0; padding:0; height:100%; width:100%;
     background: var(--bg); color: var(--text);
     font-family: 'Inter', sans-serif;
-    overflow: hidden;
-    overscroll-behavior: none;
+    overflow: hidden; overscroll-behavior: none;
   }
+  button{ font-family: inherit; }
+
+  /* ---- ambient glow background, like a modern AI product site ---- */
+  #ambient{
+    position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none;
+  }
+  #ambient .blob{ position: absolute; border-radius: 50%; filter: blur(90px); opacity: 0.28; }
+  #ambient .b1{ width: 340px; height: 340px; background: #8B7CF6; top: -120px; left: -80px; }
+  #ambient .b2{ width: 300px; height: 300px; background: #F2C94C; bottom: -100px; right: -80px; }
+  #ambient .b3{ width: 220px; height: 220px; background: #4CD8F2; top: 40%; right: -60px; opacity: 0.16; }
 
   /* ============ INTRO / SPLASH VIDEO ============ */
-  #intro{
-    position: fixed; inset: 0;
-    background: #000;
-    z-index: 100;
-    display: flex; align-items: center; justify-content: center;
-    transition: opacity .6s ease, visibility .6s ease;
-  }
+  #intro{ position: fixed; inset: 0; background: #000; z-index: 200; display:flex; align-items:center; justify-content:center; transition: opacity .6s ease, visibility .6s ease; }
   #intro.hidden{ opacity: 0; visibility: hidden; pointer-events: none; }
-
-  #intro-video{
-    position: absolute; inset: 0;
-    width: 100%; height: 100%;
-    object-fit: cover;
-    object-position: center;
-    background: #000;
-  }
-
-  #intro-scrim{
-    position: absolute; inset: 0;
-    background: linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0) 30%, rgba(0,0,0,0) 60%, rgba(8,8,13,0.85) 100%);
-    pointer-events: none;
-  }
-
-  #intro-skip{
-    position: absolute; top: max(18px, env(safe-area-inset-top)); right: 18px;
-    background: rgba(20,20,29,0.55);
-    border: 1px solid rgba(255,255,255,0.18);
-    color: var(--text);
-    font-family: 'Inter', sans-serif;
-    font-size: 13px; font-weight: 500;
-    padding: 8px 14px;
-    border-radius: 100px;
-    backdrop-filter: blur(8px);
-    opacity: 0;
-    transition: opacity .4s ease;
-    display: flex; align-items: center; gap: 6px;
-  }
+  #intro-video{ position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; background: #000; }
+  #intro-scrim{ position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,0.12) 0%, rgba(0,0,0,0) 28%, rgba(0,0,0,0) 60%, rgba(7,7,11,0.88) 100%); pointer-events: none; }
+  #intro-skip{ position: absolute; top: max(18px, env(safe-area-inset-top)); right: 18px; background: rgba(20,20,29,0.5); border: 1px solid rgba(255,255,255,0.18); color: var(--text); font-size: 12.5px; font-weight: 500; padding: 8px 14px; border-radius: 100px; backdrop-filter: blur(10px); opacity: 0; transition: opacity .4s ease; }
   #intro-skip.show{ opacity: 1; }
   #intro-skip:active{ transform: scale(0.96); }
-
-  #tap-to-start{
-    position: absolute; inset: 0;
-    display: none;
-    align-items: center; justify-content: center;
-    flex-direction: column;
-    gap: 18px;
-    background: rgba(8,8,13,0.55);
-    backdrop-filter: blur(2px);
-  }
+  #intro-progress{ position: absolute; bottom: max(18px, env(safe-area-inset-bottom)); left: 18px; right: 18px; display: flex; gap: 6px; }
+  #intro-progress .seg{ flex: 1; height: 3px; border-radius: 3px; background: rgba(255,255,255,0.22); overflow: hidden; }
+  #intro-progress .seg i{ display: block; height: 100%; width: 0%; background: var(--gold); }
+  #tap-to-start{ position: absolute; inset: 0; display: none; align-items: center; justify-content: center; flex-direction: column; gap: 18px; background: rgba(7,7,11,0.5); }
   #tap-to-start.show{ display: flex; }
-  #tap-to-start .ring{
-    width: 74px; height: 74px;
-    border-radius: 50%;
-    border: 1.5px solid rgba(242,201,76,0.5);
-    display: flex; align-items: center; justify-content: center;
-    animation: pulse 1.8s ease-in-out infinite;
-  }
+  #tap-to-start .ring{ width: 74px; height: 74px; border-radius: 50%; border: 1.5px solid rgba(242,201,76,0.5); display: flex; align-items: center; justify-content: center; animation: pulse 1.8s ease-in-out infinite; }
   #tap-to-start .ring svg{ width: 26px; height: 26px; margin-left: 3px; }
-  #tap-to-start span{
-    font-family: 'Space Grotesk', sans-serif;
-    font-size: 14px; color: var(--muted); letter-spacing: 0.02em;
-  }
-  @keyframes pulse{
-    0%,100%{ box-shadow: 0 0 0 0 rgba(242,201,76,0.25); }
-    50%{ box-shadow: 0 0 0 14px rgba(242,201,76,0); }
-  }
+  #tap-to-start span{ font-family: 'Space Grotesk', sans-serif; font-size: 14px; color: var(--muted); }
+  @keyframes pulse{ 0%,100%{ box-shadow: 0 0 0 0 rgba(242,201,76,0.25); } 50%{ box-shadow: 0 0 0 14px rgba(242,201,76,0); } }
 
-  /* ============ MAIN APP ============ */
-  #app{
-    position: fixed; inset: 0;
-    display: flex; flex-direction: column;
-    padding: max(22px, env(safe-area-inset-top)) 20px max(22px, env(safe-area-inset-bottom));
-    opacity: 0;
-    transform: translateY(8px);
-    transition: opacity .5s ease, transform .5s ease;
-  }
+  /* ============ APP SHELL ============ */
+  #app{ position: fixed; inset: 0; display: flex; flex-direction: column; opacity: 0; transform: translateY(8px); transition: opacity .5s ease, transform .5s ease; }
   #app.in{ opacity: 1; transform: translateY(0); }
 
-  #stars-canvas{
-    position: fixed; inset: 0; z-index: -1;
+  #topbar{ display: flex; align-items: center; justify-content: space-between; padding: max(16px, env(safe-area-inset-top)) 18px 10px; flex-shrink: 0; }
+  #topbar .brand{ font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 15px; letter-spacing: -0.01em; display: flex; align-items: center; gap: 6px; }
+  #balance{
+    display: flex; align-items: center; gap: 6px; cursor: pointer;
+    background: var(--surface); backdrop-filter: blur(16px);
+    border: 1px solid var(--glass-border); padding: 7px 13px 7px 7px; border-radius: 100px;
+    font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 13px;
+    transition: border-color .2s ease;
   }
+  #balance:active{ transform: scale(0.96); }
+  #balance .coin{ width: 22px; height: 22px; border-radius: 50%; background: linear-gradient(135deg,var(--gold),#E0A93A); display:flex; align-items:center; justify-content:center; font-size: 12px; }
+  #balance .chev{ color: var(--muted); font-size: 10px; margin-left: 2px; }
 
-  .eyebrow{
-    font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
-    color: var(--muted); font-weight: 500; margin: 0 0 6px 2px;
-  }
-  .greeting{
-    font-family: 'Space Grotesk', sans-serif;
-    font-size: clamp(26px, 8vw, 34px);
-    font-weight: 700;
-    margin: 0 0 2px 2px;
-    line-height: 1.15;
-  }
-  .greeting .wave{ display: inline-block; animation: wave 1.6s ease-in-out .3s; transform-origin: 70% 70%; }
-  @keyframes wave{
-    0%,100%{ transform: rotate(0deg); }
-    15%{ transform: rotate(16deg); }
-    30%{ transform: rotate(-10deg); }
-    45%{ transform: rotate(14deg); }
-    60%{ transform: rotate(-4deg); }
-  }
-  .subtitle{
-    font-size: 14px; color: var(--muted); margin: 8px 2px 0; line-height: 1.5;
-    max-width: 34ch;
-  }
+  .pages{ flex: 1; overflow: hidden; position: relative; }
+  .page{ position: absolute; inset: 0; overflow-y: auto; padding: 4px 18px 84px; opacity: 0; visibility: hidden; transform: translateX(10px); transition: opacity .25s ease, transform .25s ease, visibility .25s; }
+  .page.active{ opacity: 1; visibility: visible; transform: translateX(0); }
 
-  .grid{
-    margin-top: 28px;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-    flex: 1;
+  .eyebrow{ font-size: 11.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); font-weight: 500; margin: 8px 0 6px 2px; }
+  .greeting{ font-family: 'Space Grotesk', sans-serif; font-size: clamp(22px, 6.6vw, 27px); font-weight: 700; margin: 0 0 2px 2px; line-height: 1.15; letter-spacing: -0.01em; }
+  .subtitle{ font-size: 13px; color: var(--muted); margin: 6px 2px 0; line-height: 1.5; max-width: 34ch; }
+  .section-title{ font-family: 'Space Grotesk', sans-serif; font-size: 16.5px; font-weight: 700; margin: 20px 2px 11px; display: flex; align-items: center; gap: 7px; letter-spacing: -0.01em; }
+
+  /* ---- glass card base ---- */
+  .glass{ background: var(--surface); backdrop-filter: blur(18px) saturate(140%); -webkit-backdrop-filter: blur(18px) saturate(140%); border: 1px solid var(--glass-border); }
+
+  /* ---- Nakrutka platform banners ---- */
+  .platform-banners{ display: flex; flex-direction: column; gap: 10px; }
+  .p-banner{ position: relative; overflow: hidden; border-radius: 17px; padding: 15px 16px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; border: 1px solid var(--glass-border); min-height: 64px; }
+  .p-banner::before{ content:''; position:absolute; inset:0; opacity: .85; }
+  .p-banner:active{ transform: scale(0.98); }
+  .p-banner .pb-left{ display:flex; align-items:center; gap: 13px; z-index: 1; }
+  .p-banner .pb-icon{ width: 40px; height: 40px; border-radius: 12px; background: rgba(255,255,255,0.18); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; font-size: 19px; flex-shrink: 0; z-index:1; }
+  .p-banner h4{ margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 14.5px; font-weight: 700; color: #fff; z-index:1; }
+  .p-banner p{ margin: 2px 0 0; font-size: 11.5px; color: rgba(255,255,255,0.85); z-index:1; }
+  .p-banner .pb-arrow{ font-size: 18px; color: rgba(255,255,255,0.85); z-index: 1; }
+  .p-banner.instagram{ background: linear-gradient(135deg,#F58529,#DD2A7B,#8134AF,#515BD4); }
+  .p-banner.telegram{ background: linear-gradient(135deg,#2AABEE,#229ED9); }
+  .p-banner.facebook{ background: linear-gradient(135deg,#1877F2,#0C58C6); }
+  .p-banner.tiktok{ background: linear-gradient(135deg,#0b0b0c,#25F4EE 45%,#FE2C55); }
+  .p-banner.youtube{ background: linear-gradient(135deg,#FF0000,#a30000); }
+
+  /* ---- Akkount savdo ---- */
+  .akk-topbar{ display: flex; gap: 8px; margin: 10px 0 16px; position: sticky; top: 0; padding-top: 4px; background: var(--bg); z-index: 5; }
+  .akk-btn{
+    flex: 1; background: var(--surface); backdrop-filter: blur(14px); border: 1px solid var(--glass-border);
+    color: var(--text); border-radius: 13px; padding: 10px 6px;
+    display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 6px;
+    font-size: 11.5px; font-weight: 600; position: relative; cursor: pointer;
   }
-  .card{
-    position: relative;
-    background: linear-gradient(160deg, var(--surface) 0%, var(--surface-2) 100%);
-    border: 1px solid var(--border);
-    border-radius: 20px;
-    padding: 18px;
-    display: flex; flex-direction: column; justify-content: space-between;
-    min-height: 132px;
-    overflow: hidden;
+  .akk-btn .ic{ font-size: 15px; }
+  .akk-btn:active{ transform: scale(0.96); }
+  .akk-btn#btn-add{ background: linear-gradient(135deg, var(--gold), #E0A93A); color: #1A1204; border: none; }
+  .badge{ position: absolute; top: 3px; right: 8px; background: var(--danger); color: #fff; font-size: 9.5px; font-weight: 700; min-width: 15px; height: 15px; border-radius: 8px; display: flex; align-items: center; justify-content: center; padding: 0 4px; }
+  .badge.zero{ display: none; }
+
+  #listings-grid{ display: flex; flex-direction: column; gap: 10px; }
+  .empty-state{ text-align: center; color: var(--muted); font-size: 13px; padding: 46px 20px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .empty-state .em-icon{ font-size: 32px; }
+
+  .listing-card{ background: var(--surface); backdrop-filter: blur(16px); border: 1px solid var(--glass-border); border-radius: 16px; padding: 12px; cursor: pointer; display: flex; gap: 12px; }
+  .listing-card:active{ transform: scale(0.985); }
+  .lc-thumb{ width: 64px; height: 64px; border-radius: 12px; flex-shrink: 0; object-fit: cover; background: var(--surface-2); display:flex; align-items:center; justify-content:center; font-size: 26px; }
+  .lc-body{ flex: 1; min-width: 0; }
+  .lc-top{ display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+  .lc-game{ font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 14px; display: flex; align-items: center; gap: 6px; }
+  .lc-tag{ font-size: 10px; color: var(--muted); background: var(--surface-2); padding: 2px 7px; border-radius: 100px; display:inline-block; margin-top:2px; }
+  .lc-price{ font-family: 'Space Grotesk', sans-serif; font-weight: 700; color: var(--gold); font-size: 13.5px; white-space: nowrap; }
+  .lc-desc{ font-size: 12px; color: var(--muted); line-height: 1.5; margin: 4px 0 8px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .lc-actions{ display: flex; gap: 8px; }
+  .btn-mini{ border: none; border-radius: 10px; padding: 8px 12px; font-size: 11.5px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px; }
+  .btn-mini.add-cart{ background: var(--surface-2); color: var(--text); border: 1px solid var(--glass-border); }
+  .btn-mini.add-cart:active{ transform: scale(0.96); }
+  .btn-mini.added{ background: var(--good); color: #06210f; }
+
+  /* ---- bottom nav (smaller, per request) ---- */
+  #bottom-nav{ position: absolute; left: 0; right: 0; bottom: 0; display: flex; gap: 6px; padding: 8px 14px max(8px, env(safe-area-inset-bottom)); background: linear-gradient(180deg, rgba(7,7,11,0) 0%, var(--bg) 35%); z-index: 10; }
+  .nav-btn{
+    flex: 1; background: var(--surface); backdrop-filter: blur(14px); border: 1px solid var(--glass-border);
+    color: var(--muted); border-radius: 12px; padding: 8px 6px;
+    font-size: 10.5px; font-weight: 600; display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 5px;
     cursor: pointer;
-    transition: transform .18s ease, border-color .18s ease;
   }
-  .card:active{ transform: scale(0.965); border-color: rgba(255,255,255,0.2); }
-  .card .glow{
-    position: absolute; width: 90px; height: 90px; border-radius: 50%;
-    filter: blur(30px); opacity: 0.35; top: -20px; right: -20px;
-  }
-  .card .icon{ font-size: 24px; }
-  .card h3{
-    font-family: 'Space Grotesk', sans-serif;
-    font-size: 15.5px; font-weight: 600; margin: 10px 0 2px;
-  }
-  .card p{ font-size: 12px; color: var(--muted); margin: 0; line-height: 1.4; }
+  .nav-btn .ni{ font-size: 14px; }
+  .nav-btn.active{ color: var(--text); border-color: rgba(242,201,76,0.4); background: var(--surface-2); }
 
-  .card.nakrutka .glow{ background: #8B7CF6; }
-  .card.donat .glow{ background: #F27C4C; }
-  .card.stars .glow{ background: #F2C94C; }
-  .card.premium .glow{ background: #4CD8F2; }
+  /* ============ MODALS ============ */
+  #modal-overlay{ position: fixed; inset: 0; z-index: 300; background: rgba(0,0,0,0.65); backdrop-filter: blur(2px); display: none; align-items: flex-end; justify-content: center; }
+  #modal-overlay.show{ display: flex; }
+  .modal{ display: none; width: 100%; max-width: 480px; background: #101017; backdrop-filter: blur(24px); border: 1px solid var(--glass-border); border-bottom: none; border-radius: 22px 22px 0 0; max-height: 90vh; overflow-y: auto; padding: 16px 18px max(18px, env(safe-area-inset-bottom)); animation: slideUp .28s ease; }
+  .modal.show{ display: block; }
+  @keyframes slideUp{ from{ transform: translateY(30px); opacity: 0; } to{ transform: translateY(0); opacity: 1; } }
+  .modal-head{ display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .modal-head h3{ margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 16.5px; }
+  .modal-close{ width: 28px; height: 28px; border-radius: 50%; background: var(--surface-2); border: none; color: var(--text); font-size: 15px; cursor: pointer; }
 
-  #cta{
-    margin-top: 14px;
-    display: flex; align-items: center; justify-content: center;
-    gap: 8px;
-    background: linear-gradient(135deg, var(--gold), #E0A93A);
-    color: #1A1204;
-    font-family: 'Space Grotesk', sans-serif;
-    font-weight: 700; font-size: 15px;
-    border: none; border-radius: 16px;
-    padding: 15px;
-    width: 100%;
-  }
-  #cta:active{ transform: scale(0.98); }
+  .field-label{ font-size: 12px; color: var(--muted); font-weight: 600; margin: 15px 2px 8px; }
+  .chip-grid{ display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip{ background: var(--surface-2); border: 1px solid var(--glass-border); color: var(--text); padding: 9px 14px; border-radius: 100px; font-size: 12px; cursor: pointer; }
+  .chip.selected{ background: var(--gold); color: #1A1204; border-color: var(--gold); font-weight: 700; }
 
-  .footnote{
-    text-align: center; font-size: 11px; color: #55555f;
-    margin-top: 12px;
-  }
+  /* category radio cards */
+  .cat-grid{ display: flex; gap: 10px; }
+  .cat-card{ flex: 1; background: var(--surface-2); border: 1.5px solid var(--glass-border); border-radius: 15px; padding: 16px 10px; text-align: center; cursor: pointer; }
+  .cat-card .ci{ font-size: 26px; margin-bottom: 6px; }
+  .cat-card .ct{ font-size: 12.5px; font-weight: 700; font-family: 'Space Grotesk', sans-serif; }
+  .cat-card.selected{ border-color: var(--gold); background: rgba(242,201,76,0.1); }
+
+  textarea, input[type="number"], input[type="text"]{ width: 100%; background: var(--surface-2); border: 1px solid var(--glass-border); color: var(--text); border-radius: 13px; padding: 12px 13px; font-size: 13.5px; font-family: inherit; resize: none; }
+  textarea:focus, input:focus{ outline: none; border-color: var(--gold); }
+  .price-wrap{ position: relative; }
+  .price-wrap span{ position: absolute; right: 14px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 13px; }
+
+  /* photo upload */
+  .photo-upload{ width: 100%; aspect-ratio: 16/9; border-radius: 15px; border: 1.5px dashed var(--glass-border); background: var(--surface-2); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; cursor: pointer; color: var(--muted); font-size: 12.5px; overflow: hidden; position: relative; }
+  .photo-upload img{ position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .photo-upload .pu-icon{ font-size: 24px; }
+  .photo-upload .pu-remove{ position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,0.55); color: #fff; border: none; width: 26px; height: 26px; border-radius: 50%; font-size: 13px; z-index: 2; }
+
+  .btn-primary{ width: 100%; margin-top: 18px; background: linear-gradient(135deg, var(--gold), #E0A93A); color: #1A1204; border: none; border-radius: 15px; padding: 14px; font-weight: 700; font-size: 14px; cursor: pointer; }
+  .btn-primary:active{ transform: scale(0.98); }
+
+  .detail-photo{ width: 100%; aspect-ratio: 16/9; border-radius: 15px; object-fit: cover; margin-bottom: 4px; background: var(--surface-2); }
+  .detail-row{ display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--glass-border); font-size: 12.5px; }
+  .detail-row:last-child{ border-bottom: none; }
+  .detail-row .dl{ color: var(--muted); }
+  .detail-desc{ background: var(--surface-2); border-radius: 13px; padding: 13px; font-size: 12.5px; line-height: 1.6; color: var(--text); margin-top: 8px; }
+
+  .cart-item{ display: flex; align-items: center; justify-content: space-between; padding: 11px 0; border-bottom: 1px solid var(--glass-border); gap: 10px; }
+  .cart-item:last-child{ border-bottom: none; }
+  .ci-info{ font-size: 12.5px; }
+  .ci-info b{ display: block; font-family: 'Space Grotesk', sans-serif; margin-bottom: 2px; }
+  .ci-info span{ color: var(--gold); font-size: 12px; }
+  .ci-remove{ background: rgba(242,96,76,0.15); color: var(--danger); border: none; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-size: 13px; flex-shrink:0; }
+  .cart-total{ display: flex; justify-content: space-between; margin-top: 13px; padding-top: 13px; border-top: 1px solid var(--glass-border); font-family: 'Space Grotesk', sans-serif; font-weight: 700; }
+  .cart-total span{ color: var(--gold); }
+
+  .svc-row{ display: flex; align-items: center; justify-content: space-between; background: var(--surface-2); border-radius: 13px; padding: 12px; margin-bottom: 9px; }
+  .svc-row .sv-name{ font-size: 12.5px; font-weight: 600; }
+  .svc-row .sv-price{ font-size: 12px; color: var(--gold); font-weight: 700; }
+  .svc-row button{ background: var(--gold); color: #1A1204; border: none; border-radius: 10px; padding: 8px 12px; font-size: 11.5px; font-weight: 700; cursor: pointer; }
+
+  /* exchange modal */
+  .rate-note{ font-size: 11.5px; color: var(--muted); line-height: 1.5; background: var(--surface-2); border-radius: 12px; padding: 11px; margin-top: 10px; }
+  .exchange-preview{ display: flex; align-items: center; justify-content: center; gap: 14px; margin: 18px 0; }
+  .exchange-preview .ex-box{ flex: 1; background: var(--surface-2); border-radius: 14px; padding: 14px; text-align: center; }
+  .exchange-preview .ex-box .exv{ font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 16px; }
+  .exchange-preview .ex-box .exl{ font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+  .exchange-preview .ex-arrow{ font-size: 16px; color: var(--muted); }
+
+  #toast{ position: fixed; left: 50%; bottom: 92px; transform: translateX(-50%) translateY(20px); background: #16161f; border: 1px solid var(--glass-border); color: var(--text); padding: 11px 18px; border-radius: 100px; font-size: 12.5px; font-weight: 600; z-index: 400; opacity: 0; transition: opacity .25s ease, transform .25s ease; pointer-events: none; max-width: 86%; text-align:center; }
+  #toast.show{ opacity: 1; transform: translateX(-50%) translateY(0); }
 </style>
 </head>
 <body>
+
+  <div id="ambient"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div></div>
 
   <!-- ============ INTRO SPLASH VIDEO ============ -->
   <div id="intro">
     <video id="intro-video" src="kirish.mp4" playsinline webkit-playsinline preload="auto"></video>
     <div id="intro-scrim"></div>
     <button id="intro-skip">O'tkazib yuborish →</button>
+    <div id="intro-progress"><div class="seg"><i id="seg1"></i></div><div class="seg"><i id="seg2"></i></div></div>
     <div id="tap-to-start">
-      <div class="ring">
-        <svg viewBox="0 0 24 24" fill="none"><path d="M6 4L19 12L6 20V4Z" fill="#F2C94C"/></svg>
-      </div>
+      <div class="ring"><svg viewBox="0 0 24 24" fill="none"><path d="M6 4L19 12L6 20V4Z" fill="#F2C94C"/></svg></div>
       <span>Boshlash uchun bosing</span>
     </div>
   </div>
 
   <!-- ============ MAIN APP ============ -->
   <div id="app">
-    <canvas id="stars-canvas"></canvas>
+    <div id="topbar">
+      <div class="brand">✨ SMM Bot</div>
+      <div id="balance"><span class="coin">💰</span><span id="balance-amount">0</span> so'm<span class="chev">▾</span></div>
+    </div>
 
-    <div class="eyebrow" id="date-eyebrow">Xush kelibsiz</div>
-    <h1 class="greeting"><span id="greet-name">Salom</span> <span class="wave">👋</span></h1>
-    <p class="subtitle">Kerakli xizmatni tanlang — barchasi tez, xavfsiz va bir joyda.</p>
+    <div class="pages">
+      <div id="page-nakrutka" class="page active">
+        <div class="eyebrow" id="date-eyebrow">Xush kelibsiz</div>
+        <h1 class="greeting"><span id="greet-name">Salom</span> <span class="wave">👋</span></h1>
+        <p class="subtitle">Ijtimoiy tarmoq uchun kerakli xizmatni tanlang.</p>
+        <h2 class="section-title">📈 Nakrutka</h2>
+        <div class="platform-banners" id="platform-banners"></div>
+      </div>
 
-    <div class="grid">
-      <div class="card nakrutka" data-service="nakrutka">
-        <div class="glow"></div>
-        <div class="icon">📈</div>
-        <div>
-          <h3>Nakrutka</h3>
-          <p>Obunachi, like va ko'rishlar</p>
+      <div id="page-akkount" class="page">
+        <div class="akk-topbar">
+          <button class="akk-btn" id="btn-cart"><span class="ic">🛒</span>Savat<span class="badge zero" id="cart-badge">0</span></button>
+          <button class="akk-btn" id="btn-add"><span class="ic">➕</span>E'lon berish</button>
+          <button class="akk-btn" id="btn-chat"><span class="ic">💬</span>Chat</button>
         </div>
-      </div>
-      <div class="card donat" data-service="donat">
-        <div class="glow"></div>
-        <div class="icon">💎</div>
-        <div>
-          <h3>Donat</h3>
-          <p>Kanal va guruhlarga donat</p>
-        </div>
-      </div>
-      <div class="card stars" data-service="stars">
-        <div class="glow"></div>
-        <div class="icon">⭐</div>
-        <div>
-          <h3>Stars</h3>
-          <p>Telegram Stars sotib olish</p>
-        </div>
-      </div>
-      <div class="card premium" data-service="premium">
-        <div class="glow"></div>
-        <div class="icon">👑</div>
-        <div>
-          <h3>Premium</h3>
-          <p>Telegram Premium obuna</p>
-        </div>
+        <div id="listings-grid"></div>
       </div>
     </div>
 
-    <div class="footnote">Davom etish uchun kerakli xizmatni tanlang</div>
+    <nav id="bottom-nav">
+      <button class="nav-btn active" data-page="nakrutka"><span class="ni">📈</span>Nakrutka</button>
+      <button class="nav-btn" data-page="akkount"><span class="ni">🎮</span>Akkount savdo</button>
+    </nav>
   </div>
 
-<script>
-  // ---------- Telegram WebApp init ----------
-  const tg = window.Telegram ? window.Telegram.WebApp : null;
-  if (tg) {
-    tg.ready();
-    tg.expand();
-    try { tg.setHeaderColor('#08080D'); tg.setBackgroundColor('#08080D'); } catch(e) {}
-  }
+  <!-- ============ MODALS ============ -->
+  <div id="modal-overlay">
 
-  // ---------- INTRO VIDEO LOGIC ----------
+    <div class="modal" id="modal-add">
+      <div class="modal-head"><h3>Akkount joylash</h3><button class="modal-close" data-close>✕</button></div>
+
+      <div class="field-label">Akkount turi</div>
+      <div class="cat-grid" id="cat-grid">
+        <div class="cat-card" data-cat="game"><div class="ci">🎮</div><div class="ct">O'yin akkount</div></div>
+        <div class="cat-card" data-cat="social"><div class="ci">📱</div><div class="ct">Ijtimoiy tarmoq</div></div>
+      </div>
+
+      <div id="item-section" style="display:none;">
+        <div class="field-label" id="item-label">Tanlang</div>
+        <div class="chip-grid" id="item-chips"></div>
+      </div>
+
+      <div class="field-label">Rasm qo'shish</div>
+      <div class="photo-upload" id="photo-upload">
+        <input type="file" accept="image/*" id="photo-input" style="display:none;">
+        <div class="pu-icon">📷</div>
+        <div>Skrinshot yuklash uchun bosing</div>
+      </div>
+
+      <div class="field-label">Ma'lumot bering</div>
+      <textarea id="desc-input" rows="4" placeholder="Akkount haqida to'liq ma'lumot yozing: daraja, holati va h.k."></textarea>
+
+      <div class="field-label">Narxi</div>
+      <div class="price-wrap">
+        <input type="number" id="price-input" placeholder="Masalan: 100000" min="0">
+        <span>so'm</span>
+      </div>
+
+      <button class="btn-primary" id="submit-listing">Joylash</button>
+    </div>
+
+    <div class="modal" id="modal-detail">
+      <div class="modal-head"><h3>Akkount ma'lumoti</h3><button class="modal-close" data-close>✕</button></div>
+      <div id="detail-body"></div>
+      <button class="btn-primary" id="detail-add-cart">Savatga qo'shish</button>
+    </div>
+
+    <div class="modal" id="modal-cart">
+      <div class="modal-head"><h3>Savat</h3><button class="modal-close" data-close>✕</button></div>
+      <div id="cart-body"></div>
+    </div>
+
+    <div class="modal" id="modal-platform">
+      <div class="modal-head"><h3 id="platform-title">Xizmatlar</h3><button class="modal-close" data-close>✕</button></div>
+      <div id="platform-body"></div>
+    </div>
+
+    <div class="modal" id="modal-exchange">
+      <div class="modal-head"><h3>💰 Balansni almashtirish</h3><button class="modal-close" data-close>✕</button></div>
+      <div class="field-label">Necha so'm almashtirmoqchisiz?</div>
+      <div class="price-wrap"><input type="number" id="exchange-amount" placeholder="Masalan: 25000" min="0"><span>so'm</span></div>
+      <div class="exchange-preview">
+        <div class="ex-box"><div class="exv" id="ex-som">0</div><div class="exl">so'm</div></div>
+        <div class="ex-arrow">→</div>
+        <div class="ex-box"><div class="exv" id="ex-stars">0 ⭐</div><div class="exl">Stars</div></div>
+      </div>
+      <button class="btn-primary" id="exchange-submit">Stars hisobiga o'tkazish</button>
+      <div class="rate-note">ℹ️ Kurs: 1 ⭐ Star ≈ 250 so'm. Stars — Telegram'ning rasmiy ichki valyutasi, real hisobingizga o'tkazish bot orqali rasmiy Telegram to'lov tizimi yordamida amalga oshiriladi.</div>
+    </div>
+
+  </div>
+
+  <div id="toast"></div>
+
+<script>
+  const tg = window.Telegram ? window.Telegram.WebApp : null;
+  if (tg) { tg.ready(); tg.expand(); try { tg.setHeaderColor('#07070B'); tg.setBackgroundColor('#07070B'); } catch(e) {} }
+  function haptic(){ if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light'); }
+
+  // ================= INTRO VIDEO (plays twice, seamless) =================
   const introEl = document.getElementById('intro');
   const video = document.getElementById('intro-video');
   const skipBtn = document.getElementById('intro-skip');
   const tapToStart = document.getElementById('tap-to-start');
   const appEl = document.getElementById('app');
+  const seg1 = document.getElementById('seg1');
+  const seg2 = document.getElementById('seg2');
 
-  let introFinished = false;
+  let introFinished = false, playCount = 0;
+  const TOTAL_PLAYS = 2;
 
   function finishIntro(){
     if (introFinished) return;
@@ -277,95 +355,273 @@
     appEl.classList.add('in');
     setTimeout(() => { introEl.style.display = 'none'; }, 650);
   }
-
-  // Show "skip" button 1.5s after start
-  setTimeout(() => skipBtn.classList.add('show'), 1500);
+  setTimeout(() => skipBtn.classList.add('show'), 1200);
   skipBtn.addEventListener('click', finishIntro);
-
-  // When the video ends naturally -> go to main screen
-  video.addEventListener('ended', finishIntro);
-
-  // Try to autoplay WITH sound (works inside Telegram WebApp since
-  // opening the WebApp itself counts as a user gesture on most clients).
-  video.muted = false;
-  video.volume = 1;
-
-  const playPromise = video.play();
-  if (playPromise !== undefined) {
-    playPromise.catch(() => {
-      // Autoplay with sound was blocked by the browser ->
-      // show a "tap to start" overlay so the user unlocks audio manually.
-      tapToStart.classList.add('show');
-    });
-  }
-
-  tapToStart.addEventListener('click', () => {
-    video.muted = false;
-    video.play();
-    tapToStart.classList.remove('show');
+  video.addEventListener('ended', () => {
+    playCount++;
+    if (playCount >= TOTAL_PLAYS) finishIntro();
+    else { video.currentTime = 0; video.play().catch(() => {}); }
   });
+  video.addEventListener('timeupdate', () => {
+    if (!video.duration) return;
+    const pct = (video.currentTime / video.duration) * 100;
+    if (playCount === 0) { seg1.style.width = pct + '%'; seg2.style.width = '0%'; }
+    else { seg1.style.width = '100%'; seg2.style.width = pct + '%'; }
+  });
+  video.muted = false; video.volume = 1;
+  const playPromise = video.play();
+  if (playPromise !== undefined) playPromise.catch(() => { tapToStart.classList.add('show'); });
+  tapToStart.addEventListener('click', () => { video.muted = false; video.play(); tapToStart.classList.remove('show'); });
+  video.addEventListener('loadedmetadata', () => {
+    const dur = isFinite(video.duration) ? video.duration : 8;
+    setTimeout(finishIntro, dur * 1000 * TOTAL_PLAYS + 4000);
+  });
+  setTimeout(finishIntro, 25000);
 
-  // Safety net: never trap the user on the intro for more than 15s
-  setTimeout(finishIntro, 15000);
-
-  // ---------- Greeting with Telegram user's name ----------
   try {
     const user = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
-    if (user && user.first_name) {
-      document.getElementById('greet-name').textContent = 'Salom, ' + user.first_name;
-    }
+    if (user && user.first_name) document.getElementById('greet-name').textContent = 'Salom, ' + user.first_name;
   } catch(e) {}
-
   const hour = new Date().getHours();
-  const eyebrowText = hour < 6 ? 'Xayrli tun' : hour < 12 ? 'Xayrli tong' : hour < 18 ? 'Xayrli kun' : 'Xayrli kech';
-  document.getElementById('date-eyebrow').textContent = eyebrowText;
+  document.getElementById('date-eyebrow').textContent = hour < 6 ? 'Xayrli tun' : hour < 12 ? 'Xayrli tong' : hour < 18 ? 'Xayrli kun' : 'Xayrli kech';
 
-  // ---------- Service cards ----------
-  document.querySelectorAll('.card').forEach(card => {
-    card.addEventListener('click', () => {
-      const service = card.dataset.service;
-      if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
-      if (tg && tg.sendData) {
-        tg.sendData(JSON.stringify({ action: 'open_service', service }));
-      } else {
-        console.log('Tanlandi:', service);
-      }
+  // ================= NAV =================
+  document.querySelectorAll('.nav-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      haptic();
+      document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('page-' + btn.dataset.page).classList.add('active');
     });
   });
 
-  // ---------- Ambient twinkling stars background ----------
-  const canvas = document.getElementById('stars-canvas');
-  const ctx = canvas.getContext('2d');
-  let stars = [];
+  // ================= DATA =================
+  const PLATFORMS = [
+    { id: 'instagram', name: 'Instagram', icon: '📷', cls: 'instagram', desc: 'Obunachi, like, ko\'rishlar', services: [
+      { name: '1000 ta Obunachi', price: '25 000 so\'m' }, { name: '1000 ta Like', price: '15 000 so\'m' }, { name: '5000 ta Ko\'rish', price: '10 000 so\'m' } ]},
+    { id: 'telegram', name: 'Telegram', icon: '✈️', cls: 'telegram', desc: 'Kanal a\'zolari, ko\'rishlar', services: [
+      { name: '1000 ta A\'zo', price: '30 000 so\'m' }, { name: 'Post ko\'rishlar (1000)', price: '8 000 so\'m' }, { name: 'Reaksiyalar (500)', price: '12 000 so\'m' } ]},
+    { id: 'facebook', name: 'Facebook', icon: '👍', cls: 'facebook', desc: 'Follower, like, ko\'rishlar', services: [
+      { name: '1000 ta Follower', price: '28 000 so\'m' }, { name: '1000 ta Like', price: '18 000 so\'m' } ]},
+    { id: 'tiktok', name: 'TikTok', icon: '🎵', cls: 'tiktok', desc: 'Follower, like, ko\'rishlar', services: [
+      { name: '1000 ta Follower', price: '22 000 so\'m' }, { name: '1000 ta Like', price: '10 000 so\'m' }, { name: '10 000 ta Ko\'rish', price: '9 000 so\'m' } ]},
+    { id: 'youtube', name: 'YouTube', icon: '▶️', cls: 'youtube', desc: 'Obunachi, ko\'rish, layk', services: [
+      { name: '1000 ta Obunachi', price: '45 000 so\'m' }, { name: '1000 ta Ko\'rish', price: '14 000 so\'m' }, { name: '500 ta Like', price: '9 000 so\'m' } ]},
+  ];
+  const GAMES = [ 'PUBG Mobile','Free Fire','Mobile Legends','Standoff 2','CS:GO 2','Valorant','Fortnite','Clash of Clans','Clash Royale','Brawl Stars','Genshin Impact','Minecraft','GTA V','FIFA / EA FC','Dota 2','Blood Strike','Call of Duty Mobile','Roblox','Among Us','8 Ball Pool' ];
+  const SOCIALS = [ { id: 'instagram', name: 'Instagram', icon: '📷' }, { id: 'telegram', name: 'Telegram', icon: '✈️' }, { id: 'tiktok', name: 'TikTok', icon: '🎵' }, { id: 'youtube', name: 'YouTube', icon: '▶️' }, { id: 'facebook', name: 'Facebook', icon: '👍' } ];
 
-  function resize(){
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    const count = Math.floor((canvas.width * canvas.height) / 9000);
-    stars = Array.from({length: count}, () => ({
-      x: Math.random() * canvas.width,
-      y: Math.random() * canvas.height,
-      r: Math.random() * 1.1 + 0.2,
-      a: Math.random(),
-      speed: Math.random() * 0.015 + 0.004,
+  // ================= STATE =================
+  let listings = JSON.parse(localStorage.getItem('smm_listings') || '[]');
+  let cart = JSON.parse(localStorage.getItem('smm_cart') || '[]');
+  let balance = parseInt(localStorage.getItem('smm_balance') || '0', 10);
+  let selectedCategory = null;
+  let selectedItem = null;
+  let selectedPhoto = null;
+
+  function saveState(){
+    localStorage.setItem('smm_listings', JSON.stringify(listings));
+    localStorage.setItem('smm_cart', JSON.stringify(cart));
+    localStorage.setItem('smm_balance', String(balance));
+  }
+  function toast(msg){ const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 1800); }
+  function formatPrice(n){ return Number(n).toLocaleString('ru-RU').replace(/,/g, ' '); }
+  function escapeHtml(str){ const d = document.createElement('div'); d.textContent = str; return d.innerHTML; }
+
+  // ================= Nakrutka banners =================
+  function renderBanners(){
+    const wrap = document.getElementById('platform-banners');
+    wrap.innerHTML = PLATFORMS.map(p => `
+      <div class="p-banner ${p.cls}" data-platform="${p.id}">
+        <div class="pb-left"><div class="pb-icon">${p.icon}</div><div><h4>${p.name}</h4><p>${p.desc}</p></div></div>
+        <div class="pb-arrow">›</div>
+      </div>`).join('');
+    wrap.querySelectorAll('.p-banner').forEach(el => el.addEventListener('click', () => openPlatform(el.dataset.platform)));
+  }
+  function openPlatform(id){
+    const p = PLATFORMS.find(x => x.id === id);
+    document.getElementById('platform-title').textContent = p.icon + ' ' + p.name;
+    document.getElementById('platform-body').innerHTML = p.services.map(s => `
+      <div class="svc-row"><div><div class="sv-name">${s.name}</div><div class="sv-price">${s.price}</div></div><button data-svc="${s.name}">Buyurtma</button></div>`).join('');
+    document.querySelectorAll('#platform-body button').forEach(b => b.addEventListener('click', () => { haptic(); toast('"' + b.dataset.svc + '" uchun so\'rov qabul qilindi ✅'); closeModals(); }));
+    openModal('modal-platform');
+  }
+
+  // ================= Listings grid =================
+  function iconFor(item){
+    const g = GAMES.includes(item);
+    if (g) return '🎮';
+    const s = SOCIALS.find(x => x.name === item);
+    return s ? s.icon : '📦';
+  }
+  function renderListings(){
+    const grid = document.getElementById('listings-grid');
+    if (listings.length === 0){
+      grid.innerHTML = `<div class="empty-state"><div class="em-icon">🎮</div>Hali e'lonlar yo'q.<br>Birinchi bo'lib akkount joylang!</div>`;
+      return;
+    }
+    grid.innerHTML = listings.slice().reverse().map(item => `
+      <div class="listing-card" data-id="${item.id}">
+        ${item.photo ? `<img class="lc-thumb" src="${item.photo}">` : `<div class="lc-thumb">${iconFor(item.item)}</div>`}
+        <div class="lc-body">
+          <div class="lc-top"><div><div class="lc-game">${item.item}</div><span class="lc-tag">${item.category === 'game' ? 'O\'yin akkount' : 'Ijtimoiy tarmoq'}</span></div><div class="lc-price">${formatPrice(item.price)} so'm</div></div>
+          <p class="lc-desc">${escapeHtml(item.desc)}</p>
+          <div class="lc-actions"><button class="btn-mini add-cart" data-id="${item.id}">🛒 Savatga qo'shish</button></div>
+        </div>
+      </div>`).join('');
+
+    grid.querySelectorAll('.listing-card').forEach(card => card.addEventListener('click', (e) => { if (e.target.closest('.add-cart')) return; openDetail(card.dataset.id); }));
+    grid.querySelectorAll('.add-cart').forEach(btn => btn.addEventListener('click', (e) => {
+      e.stopPropagation(); addToCart(btn.dataset.id);
+      btn.textContent = '✅ Qo\'shildi'; btn.classList.add('added');
+      setTimeout(() => { btn.textContent = '🛒 Savatga qo\'shish'; btn.classList.remove('added'); }, 1200);
     }));
   }
-  window.addEventListener('resize', resize);
-  resize();
 
-  function drawStars(){
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    for (const s of stars) {
-      s.a += s.speed;
-      const alpha = (Math.sin(s.a) + 1) / 2 * 0.6 + 0.1;
-      ctx.beginPath();
-      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(242,201,76,${alpha * 0.55})`;
-      ctx.fill();
-    }
-    requestAnimationFrame(drawStars);
+  // ================= Detail modal =================
+  let currentDetailId = null;
+  function openDetail(id){
+    const item = listings.find(x => x.id === id);
+    if (!item) return;
+    currentDetailId = id;
+    document.getElementById('detail-body').innerHTML = `
+      ${item.photo ? `<img class="detail-photo" src="${item.photo}">` : ''}
+      <div class="detail-row"><span class="dl">Turi</span><b>${item.category === 'game' ? 'O\'yin akkount' : 'Ijtimoiy tarmoq'}</b></div>
+      <div class="detail-row"><span class="dl">Nomi</span><b>${item.item}</b></div>
+      <div class="detail-row"><span class="dl">Narxi</span><b style="color:var(--gold)">${formatPrice(item.price)} so'm</b></div>
+      <div class="field-label" style="margin-top:14px;">Ma'lumot</div>
+      <div class="detail-desc">${escapeHtml(item.desc)}</div>`;
+    openModal('modal-detail');
   }
-  drawStars();
+  document.getElementById('detail-add-cart').addEventListener('click', () => { if (currentDetailId) addToCart(currentDetailId); closeModals(); });
+
+  // ================= Cart =================
+  function addToCart(id){ if (!cart.includes(id)) cart.push(id); saveState(); renderCartBadge(); toast('Savatga qo\'shildi 🛒'); haptic(); }
+  function removeFromCart(id){ cart = cart.filter(x => x !== id); saveState(); renderCartBadge(); renderCartModal(); }
+  function renderCartBadge(){ const badge = document.getElementById('cart-badge'); badge.textContent = cart.length; badge.classList.toggle('zero', cart.length === 0); }
+  function renderCartModal(){
+    const body = document.getElementById('cart-body');
+    if (cart.length === 0){ body.innerHTML = `<div class="empty-state"><div class="em-icon">🛒</div>Savat bo'sh</div>`; return; }
+    let total = 0;
+    body.innerHTML = cart.map(id => {
+      const item = listings.find(x => x.id === id); if (!item) return ''; total += Number(item.price);
+      return `<div class="cart-item"><div class="ci-info"><b>${item.item}</b><span>${formatPrice(item.price)} so'm</span></div><button class="ci-remove" data-id="${id}">✕</button></div>`;
+    }).join('') + `<div class="cart-total"><span>Jami:</span><span>${formatPrice(total)} so'm</span></div>`;
+    body.querySelectorAll('.ci-remove').forEach(b => b.addEventListener('click', () => removeFromCart(b.dataset.id)));
+  }
+  document.getElementById('btn-cart').addEventListener('click', () => { renderCartModal(); openModal('modal-cart'); });
+  document.getElementById('btn-chat').addEventListener('click', () => {
+    haptic();
+    if (tg && tg.openTelegramLink) tg.openTelegramLink('https://t.me/trade_chanel_uz');
+    else toast('Chat tez orada ishga tushadi 💬');
+  });
+
+  // ================= Add listing form =================
+  document.querySelectorAll('.cat-card').forEach(card => {
+    card.addEventListener('click', () => {
+      selectedCategory = card.dataset.cat;
+      selectedItem = null;
+      document.querySelectorAll('.cat-card').forEach(c => c.classList.remove('selected'));
+      card.classList.add('selected');
+      renderItemChips();
+      document.getElementById('item-section').style.display = 'block';
+    });
+  });
+  function renderItemChips(){
+    const list = selectedCategory === 'game' ? GAMES : SOCIALS.map(s => s.name);
+    document.getElementById('item-label').textContent = selectedCategory === 'game' ? 'O\'yinni tanlang' : 'Ijtimoiy tarmoqni tanlang';
+    document.getElementById('item-chips').innerHTML = list.map(g => `<div class="chip" data-item="${g}">${g}</div>`).join('');
+    document.querySelectorAll('#item-chips .chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        selectedItem = chip.dataset.item;
+        document.querySelectorAll('#item-chips .chip').forEach(c => c.classList.remove('selected'));
+        chip.classList.add('selected');
+      });
+    });
+  }
+
+  const photoUpload = document.getElementById('photo-upload');
+  const photoInput = document.getElementById('photo-input');
+  photoUpload.addEventListener('click', (e) => { if (e.target.closest('.pu-remove')) return; photoInput.click(); });
+  photoInput.addEventListener('change', () => {
+    const file = photoInput.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      selectedPhoto = e.target.result;
+      photoUpload.innerHTML = `<img src="${selectedPhoto}"><button class="pu-remove" type="button">✕</button>`;
+      photoUpload.querySelector('.pu-remove').addEventListener('click', (ev) => {
+        ev.stopPropagation(); selectedPhoto = null; photoInput.value = '';
+        photoUpload.innerHTML = `<div class="pu-icon">📷</div><div>Skrinshot yuklash uchun bosing</div>`;
+      });
+    };
+    reader.readAsDataURL(file);
+  });
+
+  document.getElementById('btn-add').addEventListener('click', () => {
+    selectedCategory = null; selectedItem = null; selectedPhoto = null;
+    document.getElementById('desc-input').value = ''; document.getElementById('price-input').value = '';
+    document.querySelectorAll('.cat-card').forEach(c => c.classList.remove('selected'));
+    document.getElementById('item-section').style.display = 'none';
+    document.getElementById('item-chips').innerHTML = '';
+    photoInput.value = '';
+    photoUpload.innerHTML = `<div class="pu-icon">📷</div><div>Skrinshot yuklash uchun bosing</div>`;
+    openModal('modal-add');
+  });
+
+  document.getElementById('submit-listing').addEventListener('click', () => {
+    const desc = document.getElementById('desc-input').value.trim();
+    const price = document.getElementById('price-input').value;
+    if (!selectedCategory){ toast('❗ Akkount turini tanlang'); return; }
+    if (!selectedItem){ toast('❗ ' + (selectedCategory === 'game' ? 'O\'yinni' : 'Ijtimoiy tarmoqni') + ' tanlang'); return; }
+    if (!desc){ toast('❗ Ma\'lumot kiriting'); return; }
+    if (!price || Number(price) <= 0){ toast('❗ Narxni to\'g\'ri kiriting'); return; }
+
+    listings.push({ id: 'L' + Date.now(), category: selectedCategory, item: selectedItem, photo: selectedPhoto, desc, price: Number(price) });
+    saveState(); renderListings(); closeModals();
+    toast('✅ E\'lon joylandi!'); haptic();
+
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.querySelector('.nav-btn[data-page="akkount"]').classList.add('active');
+    document.getElementById('page-akkount').classList.add('active');
+  });
+
+  // ================= Balance / Exchange =================
+  const EXCHANGE_RATE = 250; // 1 Star ~= 250 so'm
+  document.getElementById('balance').addEventListener('click', () => {
+    document.getElementById('exchange-amount').value = '';
+    document.getElementById('ex-som').textContent = '0';
+    document.getElementById('ex-stars').textContent = '0 ⭐';
+    openModal('modal-exchange');
+  });
+  document.getElementById('exchange-amount').addEventListener('input', (e) => {
+    const v = Number(e.target.value) || 0;
+    document.getElementById('ex-som').textContent = formatPrice(v);
+    document.getElementById('ex-stars').textContent = Math.floor(v / EXCHANGE_RATE) + ' ⭐';
+  });
+  document.getElementById('exchange-submit').addEventListener('click', () => {
+    const v = Number(document.getElementById('exchange-amount').value) || 0;
+    if (v <= 0){ toast('❗ Summani kiriting'); return; }
+    if (v > balance){ toast('❗ Balansingizda yetarli mablag\' yo\'q'); return; }
+    haptic();
+    if (tg && tg.sendData) tg.sendData(JSON.stringify({ action: 'exchange_to_stars', amount: v }));
+    toast('So\'rov botga yuborildi, tez orada Stars hisobingizga o\'tkaziladi ⭐');
+    closeModals();
+  });
+
+  // ================= Modal helpers =================
+  function openModal(id){ document.getElementById('modal-overlay').classList.add('show'); document.querySelectorAll('.modal').forEach(m => m.classList.remove('show')); document.getElementById(id).classList.add('show'); }
+  function closeModals(){ document.getElementById('modal-overlay').classList.remove('show'); document.querySelectorAll('.modal').forEach(m => m.classList.remove('show')); }
+  document.getElementById('modal-overlay').addEventListener('click', (e) => { if (e.target.id === 'modal-overlay') closeModals(); });
+  document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', closeModals));
+
+  // ================= Init =================
+  document.getElementById('balance-amount').textContent = formatPrice(balance);
+  renderBanners();
+  renderListings();
+  renderCartBadge();
 </script>
 
 </body>
